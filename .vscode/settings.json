@@ -1,0 +1,9 @@
+{
+    "python.analysis.extraPaths": [
+        "./external",
+        "/Users/Eytan/miniconda3/envs/DisVar/lib/python3.12.12/site-packages"
+    ],
+    "python-envs.defaultEnvManager": "ms-python.python:conda",
+    "python-envs.defaultPackageManager": "ms-python.python:conda",
+    "python-envs.pythonProjects": []
+}
