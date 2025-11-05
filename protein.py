@@ -439,5 +439,5 @@ if __name__ == "__main__":
             protein = Protein(UniProt_ID = uid)
             protein.save(save_dir = args.save_dir)
             print(f"Saved {uid} to {args.save_dir}")
-        except Exception as e:
-            print(f"Failed to process {uid}: {e}")
+        except:
+            pass
