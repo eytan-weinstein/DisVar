@@ -1,9 +1,3 @@
-[submodule "external/parrot"]
-	path = external/parrot
-	url = https://github.com/idptools/parrot
-[submodule "external/shephard"]
-	path = external/shephard
-	url = https://github.com/holehouse-lab/shephard
 [submodule "external/sparrow"]
 	path = external/sparrow
 	url = https://github.com/idptools/sparrow
