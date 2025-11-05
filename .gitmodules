@@ -7,6 +7,3 @@
 [submodule "external/sparrow"]
 	path = external/sparrow
 	url = https://github.com/idptools/sparrow
-[submodule "external/LLPhyScore"]
-	path = external/LLPhyScore
-	url = https://github.com/julie-forman-kay-lab/LLPhyScore
