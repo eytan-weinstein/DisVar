@@ -440,4 +440,4 @@ if __name__ == "__main__":
             protein.save(save_dir = args.save_dir)
             print(f"Saved {uid} to {args.save_dir}")
         except:
-            pass
+            continue
