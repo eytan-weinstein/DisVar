@@ -1,5 +1,5 @@
 #!/bin/bash
-# nohup bash run_batches.sh > nohup.txt 2>&1 &
+# nohup bash run_batches.sh > nohup.txt &
 
 UNIPROT_FILE="/valr/eytan/projects/DisVar/data/human_UniProt_IDs.tsv"
 SAVE_DIR="/neuhaus/eytan/DisVar_protein_data"
