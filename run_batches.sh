@@ -20,11 +20,11 @@ done
 TOTAL=${#NONEXISTENT_IDS[@]}
 echo "Found $TOTAL missing UniProt IDs."
 
-# Determine batch size for 10 batches
-BATCHES=10
+# Determine batch size for 20 batches
+BATCHES=20
 BATCH_SIZE=$(( (TOTAL + BATCHES - 1) / BATCHES ))
 
-# Launch 10 background processes
+# Launch 20 background processes
 for i in $(seq 0 $((BATCHES-1))); do
     START=$(( i * BATCH_SIZE ))
     END=$(( START + BATCH_SIZE - 1 ))

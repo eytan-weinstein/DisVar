@@ -16,7 +16,6 @@ import json
 import pandas as pd
 import re
 import requests
-import sys
 
 import metapredict
 
@@ -407,9 +406,16 @@ class Protein:
             except:
                 continue
             try:
-		if self.aa_sequence[aa_position] == original_aa:
+                true_position = self.aa_sequence[aa_position]
+            except:
+                true_position = None
+            try:
+                off_by_1 = self.aa_sequence[aa_position - 1]
+            except:
+                off_by_1 = None
+            if true_position == original_aa:
                 aa_position += 1
-            elif self.aa_sequence[aa_position - 1] == original_aa:
+            elif off_by_1 == original_aa:
                 pass
             else:
                 continue
@@ -449,4 +455,4 @@ if __name__ == "__main__":
             protein.save(save_dir = args.save_dir)
             print(f"Saved {uid} to {args.save_dir}")
         except:
-            print(f"Failed to process {uid}: {e}", file = sys.stderr)
+            continue
