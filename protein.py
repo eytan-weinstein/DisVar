@@ -1,3 +1,11 @@
+import os
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["BLIS_NUM_THREADS"] = "1"
+
 import aiohttp
 import argparse
 import asyncio
@@ -5,10 +13,10 @@ from functools import lru_cache
 import gzip
 from io import BytesIO
 import json
-import os
 import pandas as pd
 import re
 import requests
+import sys
 
 import metapredict
 
@@ -25,7 +33,7 @@ class Protein:
 
     def __init__(self, file_path = None, UniProt_ID = None):
         """
-        Constructor for the Protein class. 
+        Constructor for the Protein class.
 
         Parameters
         ----------
@@ -41,7 +49,7 @@ class Protein:
         """
         if file_path is not None:
             self._load(file_path)
-            
+
         else:
 
             # Save directory is empty when initializing from online records
@@ -63,7 +71,7 @@ class Protein:
             self.missense_variants = self.annotate_missense_variants(self._fetch_dbSNP_missense_variants() | self._fetch_ClinVar_missense_variants())
 
             print(f"Protein {self.protein_name} ({self.UniProt_ID}) initialized with {len(self.missense_variants['disordered'])} disordered and {len(self.missense_variants['folded'])} folded missense variants.")
-    
+
     ##########################
     ###   Public methods   ###
     ##########################
@@ -86,7 +94,7 @@ class Protein:
         final_json = self.missense_variants
         final_json['UniProt_ID'] = self.UniProt_ID
         final_json['Ensembl_gene_ID'] = self.Ensembl_gene_ID
-        final_json['protein_name'] = self.protein_name      
+        final_json['protein_name'] = self.protein_name
         final_json['aa_sequence'] = self.aa_sequence
         final_json['coding_sequence'] = self.coding_sequence
         final_json['disordered_regions'] = self.disordered_regions
@@ -146,7 +154,7 @@ class Protein:
             raise ValueError(f"No Ensembl mapping found for UniProt ID {UniProt_ID}")
         Ensembl_gene_ID = next((entry.get('id') for entry in data if entry.get('type') == 'Gene'), data[0]['id'])
         return Ensembl_gene_ID
-    
+
     def _fetch_protein_name(self):
         """
         Fetches the corresponding protein name for an Ensembl gene ID.
@@ -223,7 +231,7 @@ class Protein:
 
         # No need for stop codon sequence
         return coding_sequence[:-3]
-    
+
     def _fetch_dbSNP_missense_variants(self):
         """
         Fetches known missense variants from dbSNP for the protein.
@@ -256,10 +264,10 @@ class Protein:
                         print(f"Request failed ({e}) → retrying in {wait}s...")
                         await asyncio.sleep(wait)
                 raise RuntimeError(f"Failed after retries: {URL}")
-            
+
             async with aiohttp.ClientSession(headers = BASE_HEADERS) as session:
 
-                # Retrieve all missense variants 
+                # Retrieve all missense variants
                 URL = f"{BASE_URL}/overlap/id/{self.Ensembl_gene_ID}?feature=variation"
                 variants = await safe_request(session, "GET", URL)
                 missense_variants = [variant for variant in variants if 'missense_variant' in variant.get('consequence_type', [])]
@@ -285,7 +293,7 @@ class Protein:
                 def extract_VEP(item):
                     transcript_consequences = item['transcript_consequences'][0]
                     aa_position = transcript_consequences.get('protein_start') or transcript_consequences.get('aa_start')
-                    aa_change = transcript_consequences.get('amino_acids') 
+                    aa_change = transcript_consequences.get('amino_acids')
                     if aa_position is not None and aa_change is not None:
                         return str(aa_position) + ';' + aa_change
                     return None
@@ -307,12 +315,12 @@ class Protein:
                 VEP_data = {VEP_data[id]: map_clinical_significance(missense_variants[id]) for id in missense_variants if id in VEP_data}
 
                 return VEP_data
-            
+
         return asyncio.run(async_fetch())
-    
+
     def _fetch_ClinVar_missense_variants(self):
         """
-        Fetches known missense variants from ClinVar for the protein. 
+        Fetches known missense variants from ClinVar for the protein.
         These are added to the dbSNP missense variants, with the annotations from ClinVar taking priority in case of conflict.
 
         Returns
@@ -328,7 +336,7 @@ class Protein:
                 if from_aa != to_aa and from_aa in AMINO_ACIDS and to_aa in AMINO_ACIDS:
                     return f"{pos};{AMINO_ACIDS[from_aa]}/{AMINO_ACIDS[to_aa]}"
             return None
-        
+
         # Fetch all variants from variant_summary.txt.gz (which must be in your working directory as ./data/variant_summary.txt)
         # Download periodically from https://www.ncbi.nlm.nih.gov/clinvar/docs/ftp_primer/ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/variant_summary.txt.gz/
         df = self._fetch_ClinVar_variant_summary()
@@ -351,7 +359,7 @@ class Protein:
         VEP_data = {change: significance for change, significance in zip(df['AminoAcidChange'], df['ClinicalSignificance']) if change is not None}
 
         return VEP_data
-    
+
     @staticmethod
     @lru_cache(maxsize = 1)
     def _fetch_ClinVar_variant_summary():
@@ -367,7 +375,7 @@ class Protein:
         os.makedirs(os.path.dirname(variant_summary_path), exist_ok = True)
 
         # This can be downloaded periodically as it's updated by NCBI
-        try: 
+        try:
             df = pd.read_csv(variant_summary_path, sep = '\t', dtype = str)
         except:
             URL = "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/variant_summary.txt.gz"
@@ -378,10 +386,10 @@ class Protein:
                 df = pd.read_csv(f, sep = '\t', dtype = str)
                 df.to_csv(variant_summary_path, sep = '\t', index = False)
         return df
-    
+
     def annotate_missense_variants(self, missense_variants):
         """
-        Annotates missense variants for disorder. 
+        Annotates missense variants for disorder.
 
         Returns
         -------
@@ -398,7 +406,8 @@ class Protein:
                 final_aa = aa_change.split(';')[1].split('/')[1]
             except:
                 continue
-            if self.aa_sequence[aa_position] == original_aa:
+            try:
+		if self.aa_sequence[aa_position] == original_aa:
                 aa_position += 1
             elif self.aa_sequence[aa_position - 1] == original_aa:
                 pass
@@ -440,4 +449,4 @@ if __name__ == "__main__":
             protein.save(save_dir = args.save_dir)
             print(f"Saved {uid} to {args.save_dir}")
         except:
-            continue
+            print(f"Failed to process {uid}: {e}", file = sys.stderr)
