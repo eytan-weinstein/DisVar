@@ -1,3 +1,5 @@
+# Script for download mutational data for the entire human proteome
+
 #!/bin/bash
 # nohup bash run_batches.sh > nohup.txt &
 
@@ -38,6 +40,12 @@ for i in $(seq 0 $((BATCHES-1))); do
     # Launch Python script for this batch in the background
     (
         for ID in "${BATCH_IDS[@]}"; do
+            OMP_NUM_THREADS=1 \
+            OPENBLAS_NUM_THREADS=1 \
+            MKL_NUM_THREADS=1 \
+            NUMEXPR_NUM_THREADS=1 \
+            VECLIB_MAXIMUM_THREADS=1 \
+            BLIS_NUM_THREADS=1 \
             python protein.py --UniProt "$ID" --save_dir "$SAVE_DIR"
         done
     ) &

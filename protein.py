@@ -1,11 +1,3 @@
-import os
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
-os.environ["NUMEXPR_NUM_THREADS"] = "1"
-os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
-os.environ["BLIS_NUM_THREADS"] = "1"
-
 import aiohttp
 import argparse
 import asyncio
@@ -13,6 +5,7 @@ from functools import lru_cache
 import gzip
 from io import BytesIO
 import json
+import os
 import pandas as pd
 import re
 import requests
@@ -27,8 +20,62 @@ AMINO_ACIDS = {
     'Ser': 'S', 'Thr': 'T', 'Trp': 'W', 'Tyr': 'Y', 'Val': 'V'
     }
 
+CODONS = {
+    # Phenylalanine
+    'TTT': 'F', 'TTC': 'F',
+    # Leucine
+    'TTA': 'L', 'TTG': 'L', 'CTT': 'L', 'CTC': 'L', 'CTA': 'L', 'CTG': 'L',
+    # Isoleucine
+    'ATT': 'I', 'ATC': 'I', 'ATA': 'I',
+    # Methionine (Start)
+    'ATG': 'M',
+    # Valine
+    'GTT': 'V', 'GTC': 'V', 'GTA': 'V', 'GTG': 'V',
+    # Serine
+    'TCT': 'S', 'TCC': 'S', 'TCA': 'S', 'TCG': 'S', 'AGT': 'S', 'AGC': 'S',
+    # Proline
+    'CCT': 'P', 'CCC': 'P', 'CCA': 'P', 'CCG': 'P',
+    # Threonine
+    'ACT': 'T', 'ACC': 'T', 'ACA': 'T', 'ACG': 'T',
+    # Alanine
+    'GCT': 'A', 'GCC': 'A', 'GCA': 'A', 'GCG': 'A',
+    # Tyrosine
+    'TAT': 'Y', 'TAC': 'Y',
+    # Histidine
+    'CAT': 'H', 'CAC': 'H',
+    # Glutamine
+    'CAA': 'Q', 'CAG': 'Q',
+    # Asparagine
+    'AAT': 'N', 'AAC': 'N',
+    # Lysine
+    'AAA': 'K', 'AAG': 'K',
+    # Aspartic Acid
+    'GAT': 'D', 'GAC': 'D',
+    # Glutamic Acid
+    'GAA': 'E', 'GAG': 'E',
+    # Cysteine
+    'TGT': 'C', 'TGC': 'C',
+    # Tryptophan
+    'TGG': 'W',
+    # Arginine
+    'CGT': 'R', 'CGC': 'R', 'CGA': 'R', 'CGG': 'R', 'AGA': 'R', 'AGG': 'R',
+    # Glycine
+    'GGT': 'G', 'GGC': 'G', 'GGA': 'G', 'GGG': 'G',
+    # Stop codons
+    'TAA': '*', 'TAG': '*', 'TGA': '*'
+}
+
 
 class Protein:
+
+    ATTRIBUTES = ('save_dir',
+        'UniProt_ID',
+        'Ensembl_gene_ID',
+        'protein_name',
+        'aa_sequence',
+        'coding_sequence',
+        'disordered_regions',
+        'missense_variants')
 
     def __init__(self, file_path = None, UniProt_ID = None):
         """
@@ -45,8 +92,14 @@ class Protein:
 
         UniProt_ID : str OR None
             UniProt ID of the protein
+
+        ** Neither is necessary to instantiate an empty Protein object
         """
-        if file_path is not None:
+        if file_path is None and UniProt_ID is None:
+            for name in self.ATTRIBUTES:
+                setattr(self, name, None)
+
+        elif file_path is not None:
             self._load(file_path)
 
         else:
@@ -434,6 +487,68 @@ class Protein:
             missense_variants_by_disorder[domain][amended_aa_change] = clinical_significance
         
         return missense_variants_by_disorder 
+    
+    def _build_codon_substitution_table(self):
+        """
+        Utility function to build a null expectation codon substitution table.
+        """
+        # Null expectation codon substitution frequences from the Wellcome Sanger 1000 Genomes Project
+        codon_substitutions = pd.read_csv("https://raw.githubusercontent.com/pjshort/dddMAPS/master/data/forSanger_1KG_mutation_rate_table.txt", sep = r'\s+')
+
+        # Discount substitutions from start and stop codons
+        codon_substitutions = codon_substitutions[~codon_substitutions['from'].isin(['ATG', 'TAA', 'TAG', 'TGA'])] 
+
+        # Discount substitutions to stop codons
+        codon_substitutions = codon_substitutions[~codon_substitutions['to'].isin(['TAA', 'TAG', 'TGA'])]
+
+        # Map codons to amino acid substitutions
+        codon_substitutions['aa_change'] = codon_substitutions.apply(lambda row: f"{CODONS[row['from']]}/{CODONS[row['to']]}", axis = 1)
+
+        # Normalize codon substituiton frequencies
+        codon_substitutions['mu_snp'] = codon_substitutions['mu_snp'] / codon_substitutions['mu_snp'].sum()
+
+        # Transform to a dictionary mapping codons to their possible amino acid substitutions and their frequencies
+        codon_substitutions = {codon: dict(zip(sub_df['aa_change'], sub_df['mu_snp'])) for codon, sub_df in codon_substitutions.groupby('from')}
+
+        # Save to /data directory
+        with open('./data/codon_substitutions.json', 'w') as f:
+            json.dump(codon_substitutions, f, indent = 4)
+    
+    def _compute_null_expectation_mutational_frequencies(self, CDS):
+        """
+        Given a coding sequence, computes a normalized null expectation of the germline mutational frequencies.
+
+        Parameters
+        ----------
+        CDS : str
+            A coding sequence 
+
+        Returns
+        -------
+        null_expectation_mutational_frequencies : dict[str:float]
+            A dictionary mapping amino acid changes (e.g., "A/G") to their expected proportions among mutations annotated in that sequence 
+        """
+        # Ensure coding sequence can be separated by codons
+        if len(CDS) < 3:
+            raise Exception("CDS must have at least one codon.")
+        CDS = CDS[:len(CDS) - len(CDS) % 3]
+
+        # Compute a null expectation of the mutational frequencies by sliding along the sequence by codon
+        with open('./data/codon_substitutions.json', 'r') as f:
+            codon_substitutions = json.load(f)
+        null_expectation_mutational_frequencies = {substitution: 0.0 for substitution in (k for v in codon_substitutions.values() for k in v.keys())}
+        it = iter(CDS)
+        for codon in zip(it, it, it):
+            codon_str = ''.join(codon)
+            if codon_str in codon_substitutions:
+                for aa_change, mu in codon_substitutions[codon_str].items():
+                    null_expectation_mutational_frequencies[aa_change] += mu
+        
+        # Normalize mutational frequencies
+        total = sum(null_expectation_mutational_frequencies.values())
+        null_expectation_mutational_frequencies = {k: v / total for k, v in null_expectation_mutational_frequencies.items()} if total > 0 else null_expectation_mutational_frequencies
+
+        return null_expectation_mutational_frequencies
 
 
 if __name__ == "__main__":
@@ -455,4 +570,5 @@ if __name__ == "__main__":
             protein.save(save_dir = args.save_dir)
             print(f"Saved {uid} to {args.save_dir}")
         except:
+            print(f"Could not build a Protein object for {uid}.")
             continue
