@@ -9,7 +9,7 @@ from protein import Protein
 ##########################
 
 
-def get_exome_mutational_frequencies(proteome_dir):
+def compute_exome_mutational_frequencies(proteome_dir):
     """
     Computes and then saves expected and actual mutational frequencies for the human exome.
     These are stored at stored at './data/mutational_frequencies/exome'
@@ -33,7 +33,7 @@ def get_exome_mutational_frequencies(proteome_dir):
     print("The length of the exome is {} bp.".format(len(exome)))
     _save_frequencies('exome', expected, all_actual, pathogenic_actual, other_actual)
 
-def get_disordered_exome_mutational_frequencies(proteome_dir):
+def compute_disordered_exome_mutational_frequencies(proteome_dir):
     """
     Computes and then saves expected and actual mutational frequencies for the disordered human exome.
     These are stored at stored at './data/mutational_frequencies/disordered_exome'
@@ -59,7 +59,7 @@ def get_disordered_exome_mutational_frequencies(proteome_dir):
     print("The length of the disordered exome is {} bp.".format(len(disordered_exome)))
     _save_frequencies('disordered_exome', expected, all_actual, pathogenic_actual, other_actual)
 
-def get_folded_exome_mutational_frequencies(proteome_dir):
+def compute_folded_exome_mutational_frequencies(proteome_dir):
     """
     Computes and then saves expected and actual mutational frequencies for the folded human exome.
     These are stored at stored at './data/mutational_frequencies/folded_exome'
