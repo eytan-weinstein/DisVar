@@ -163,6 +163,15 @@ class Protein:
     ###   Private methods   ###
     ###########################
 
+    def _is_valid_coding_sequence(self):
+        if len(self.coding_sequence) % 3 != 0:
+            return False
+        coding_seq = self.coding_sequence[:len(self.coding_sequence) - len(self.coding_sequence) % 3]
+        protein_seq = ''.join(CODONS.get(coding_seq[i:i+3], 'X') for i in range(0, len(coding_seq), 3))
+        if protein_seq != self.aa_sequence:
+            return False
+        return True        
+
     def _load(self, file_path):
         """
         Loads a Protein object from a file.
