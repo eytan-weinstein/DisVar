@@ -5,12 +5,11 @@ from functools import lru_cache
 import gzip
 from io import BytesIO
 import json
+import metapredict
 import os
 import pandas as pd
 import re
 import requests
-
-import metapredict
 
 
 AMINO_ACIDS = {
@@ -120,7 +119,7 @@ class Protein:
             self.disordered_regions = metapredict.predict_disorder_domains(self.aa_sequence).disordered_domain_boundaries
 
             # Annotate known missense variants from dbSNP and ClinVar
-            self.missense_variants = self.annotate_missense_variants(self._fetch_dbSNP_missense_variants() | self._fetch_ClinVar_missense_variants())
+            self.missense_variants = self._annotate_missense_variants(self._fetch_dbSNP_missense_variants() | self._fetch_ClinVar_missense_variants())
 
             print(f"Protein {self.protein_name} ({self.UniProt_ID}) initialized with {len(self.missense_variants['disordered'])} disordered and {len(self.missense_variants['folded'])} folded missense variants.")
 
@@ -158,6 +157,46 @@ class Protein:
         file_path = os.path.join(save_dir, f"{custom_name}.json")
         with open(file_path, 'w') as f:
             json.dump(final_json, f, indent = 4)
+    
+    def compute_null_expectation_mutational_frequencies(self, CDS = None):
+        """
+        Given a coding sequence, computes a normalized null expectation of the germline mutational frequencies.
+
+        Parameters
+        ----------
+        CDS : str OR None
+            A coding sequence
+            If None, will assume the whole coding sequence for this protein
+
+        Returns
+        -------
+        null_expectation_mutational_frequencies : dict[str:float]
+            A dictionary mapping amino acid changes (e.g., "A/G") to their expected proportions among mutations annotated in that sequence 
+        """
+        # If CDS is None, pull coding sequence for entire protein
+        if CDS is None:
+            CDS = self.coding_sequence
+
+        # Ensure coding sequence can be separated by codons
+        if len(CDS) < 3:
+            raise Exception("CDS must have at least one codon.")
+        CDS = CDS[:len(CDS) - len(CDS) % 3]
+
+        # Compute a null expectation of the mutational frequencies by sliding along the sequence by codon
+        null_expectation_mutational_frequencies = self._initialize_mutational_frequencies()
+        with open('./data/codon_substitutions.json', 'r') as f:
+            codon_substitutions = json.load(f)
+        it = iter(CDS)
+        for codon in zip(it, it, it):
+            codon_str = ''.join(codon)
+            if codon_str in codon_substitutions:
+                for aa_change, mu in codon_substitutions[codon_str].items():
+                    null_expectation_mutational_frequencies[aa_change] += mu
+        
+        # Normalize mutational frequencies
+        null_expectation_mutational_frequencies = self._normalize_mutational_frequencies(null_expectation_mutational_frequencies)
+
+        return null_expectation_mutational_frequencies
 
     ###########################
     ###   Private methods   ###
@@ -448,7 +487,7 @@ class Protein:
                 df.to_csv(variant_summary_path, sep = '\t', index = False)
         return df
 
-    def annotate_missense_variants(self, missense_variants):
+    def _annotate_missense_variants(self, missense_variants):
         """
         Annotates missense variants for disorder.
 
@@ -496,10 +535,44 @@ class Protein:
             missense_variants_by_disorder[domain][amended_aa_change] = clinical_significance
         
         return missense_variants_by_disorder 
+
+    #####################
+    ###   Utilities   ###
+    #####################
+
+    def _parse_aa_change(self, aa_change, whole_change = False):
+        """
+        Parses amino acid change notations to extract position, original, and final
+
+        Parameters
+        ----------
+        aa_change : str
+            An amino acid change notation of the form e.g. '447;F/V'
+        whole_change : str
+            Whether to separate the original and final amino acids
+
+        Returns
+        -------
+        (position, original, final) : (str, str, str) 
+            The position of the mutation in the protein sequence, the original amino acid (before mutation), the final amino acid (after mutation)
+        OR 
+
+        (position, aa_change) : str
+            The position of the mutation in the protein sequence and the amino acid change as a string of the form e.g. 'F/V'
+        final : str
+            The final amino acid (after mutation)
+        """
+        position = aa_change.split(';')[0]
+        aa_change = aa_change.split(';')[1]
+        if whole_change:
+            return position, aa_change
+        original = aa_change.split('/')[0]
+        final = aa_change.split('/')[1]
+        return position, original, final
     
     def _build_codon_substitution_table(self):
         """
-        Utility function to build a null expectation codon substitution table.
+        Builds the null expectation codon substitution table stored at './data/codon_substitutions.json'.
         """
         # Null expectation codon substitution frequences from the Wellcome Sanger 1000 Genomes Project
         codon_substitutions = pd.read_csv("https://raw.githubusercontent.com/pjshort/dddMAPS/master/data/forSanger_1KG_mutation_rate_table.txt", sep = r'\s+')
@@ -523,41 +596,31 @@ class Protein:
         with open('./data/codon_substitutions.json', 'w') as f:
             json.dump(codon_substitutions, f, indent = 4)
     
-    def _compute_null_expectation_mutational_frequencies(self, CDS):
+    def _initialize_mutational_frequencies(self):
         """
-        Given a coding sequence, computes a normalized null expectation of the germline mutational frequencies.
-
-        Parameters
-        ----------
-        CDS : str
-            A coding sequence 
+        Initializes a dictionary mapping valid amino changes to mutational frequencies.
 
         Returns
         -------
-        null_expectation_mutational_frequencies : dict[str:float]
-            A dictionary mapping amino acid changes (e.g., "A/G") to their expected proportions among mutations annotated in that sequence 
+        mutational_frequencies : dict[str: float]
+            A dictionary mapping valid amino acid changes (e.g., "A/G") to mutational frequencies (all 0.0 upon initialization)
         """
-        # Ensure coding sequence can be separated by codons
-        if len(CDS) < 3:
-            raise Exception("CDS must have at least one codon.")
-        CDS = CDS[:len(CDS) - len(CDS) % 3]
-
-        # Compute a null expectation of the mutational frequencies by sliding along the sequence by codon
         with open('./data/codon_substitutions.json', 'r') as f:
             codon_substitutions = json.load(f)
-        null_expectation_mutational_frequencies = {substitution: 0.0 for substitution in (k for v in codon_substitutions.values() for k in v.keys())}
-        it = iter(CDS)
-        for codon in zip(it, it, it):
-            codon_str = ''.join(codon)
-            if codon_str in codon_substitutions:
-                for aa_change, mu in codon_substitutions[codon_str].items():
-                    null_expectation_mutational_frequencies[aa_change] += mu
-        
-        # Normalize mutational frequencies
-        total = sum(null_expectation_mutational_frequencies.values())
-        null_expectation_mutational_frequencies = {k: v / total for k, v in null_expectation_mutational_frequencies.items()} if total > 0 else null_expectation_mutational_frequencies
+        return {substitution: 0.0 for substitution in (k for v in codon_substitutions.values() for k in v.keys())}
+    
+    def _normalize_mutational_frequencies(self, mutational_frequencies):
+        """
+        Ensures that mutational frequencies sum to 1.
 
-        return null_expectation_mutational_frequencies
+        Returns
+        -------
+        mutational_frequencies : dict[str: float]
+            A normalized mapping valid amino acid changes (e.g., "A/G") to mutational frequencies 
+        """
+        total = sum(mutational_frequencies.values())
+        normalized_mutational_frequencies = {k: v / total for k, v in mutational_frequencies.items()} if total > 0 else mutational_frequencies
+        return normalized_mutational_frequencies
 
 
 if __name__ == "__main__":
