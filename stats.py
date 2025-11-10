@@ -20,18 +20,17 @@ def compute_exome_mutational_frequencies(proteome_dir):
         Path to the directory where Protein files for the human proteome have been downloaded by the main method of protein.py
     """
     exome = ''
-    all_actual, pathogenic_actual, other_actual = _initialize_mutation_frequencies()
+    all_actual, pathogenic_actual, benign_actual = _initialize_mutation_frequencies()
 
     for UniProt_ID in os.listdir(proteome_dir):
         protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
         exome += protein.coding_sequence
         all_variants = protein.missense_variants['disordered'] | protein.missense_variants['folded']
-        _update_variant_counts(all_variants, all_actual, pathogenic_actual, other_actual)
+        all_actual, pathogenic_actual, benign_actual = _update_variant_counts(all_variants, all_actual, pathogenic_actual, benign_actual)
         
-    all_actual, pathogenic_actual, other_actual = _normalize_dicts(all_actual, pathogenic_actual, other_actual)
     expected = Protein().compute_null_expectation_mutational_frequencies(CDS = exome)
     print("The length of the exome is {} bp.".format(len(exome)))
-    _save_frequencies('exome', expected, all_actual, pathogenic_actual, other_actual)
+    _save_frequencies('exome', expected, all_actual, pathogenic_actual, benign_actual)
 
 def compute_disordered_exome_mutational_frequencies(proteome_dir):
     """
@@ -44,7 +43,7 @@ def compute_disordered_exome_mutational_frequencies(proteome_dir):
         Path to the directory where Protein files for the human proteome have been downloaded by the main method of protein.py
     """
     disordered_exome = ''
-    all_actual, pathogenic_actual, other_actual = _initialize_mutation_frequencies()
+    all_actual, pathogenic_actual, benign_actual = _initialize_mutation_frequencies()
 
     for UniProt_ID in os.listdir(proteome_dir):
         protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
@@ -52,12 +51,11 @@ def compute_disordered_exome_mutational_frequencies(proteome_dir):
         for start, end in disordered_nt:
             disordered_exome += protein.coding_sequence[start : end]
         all_variants = protein.missense_variants['disordered']
-        _update_variant_counts(all_variants, all_actual, pathogenic_actual, other_actual)
+        all_actual, pathogenic_actual, benign_actual = _update_variant_counts(all_variants, all_actual, pathogenic_actual, benign_actual)
         
-    all_actual, pathogenic_actual, other_actual = _normalize_dicts(all_actual, pathogenic_actual, other_actual)
     expected = Protein().compute_null_expectation_mutational_frequencies(CDS = disordered_exome)
     print("The length of the disordered exome is {} bp.".format(len(disordered_exome)))
-    _save_frequencies('disordered_exome', expected, all_actual, pathogenic_actual, other_actual)
+    _save_frequencies('disordered_exome', expected, all_actual, pathogenic_actual, benign_actual)
 
 def compute_folded_exome_mutational_frequencies(proteome_dir):
     """
@@ -70,7 +68,7 @@ def compute_folded_exome_mutational_frequencies(proteome_dir):
         Path to the directory where Protein files for the human proteome have been downloaded by the main method of protein.py
     """
     folded_exome = ''
-    all_actual, pathogenic_actual, other_actual = _initialize_mutation_frequencies()
+    all_actual, pathogenic_actual, benign_actual = _initialize_mutation_frequencies()
 
     for UniProt_ID in os.listdir(proteome_dir):
         protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
@@ -83,12 +81,11 @@ def compute_folded_exome_mutational_frequencies(proteome_dir):
         if prev_end < len(protein.coding_sequence):
             folded_exome += protein.coding_sequence[prev_end : ]
         all_variants = protein.missense_variants['folded']
-        _update_variant_counts(all_variants, all_actual, pathogenic_actual, other_actual)
+        all_actual, pathogenic_actual, benign_actual = _update_variant_counts(all_variants, all_actual, pathogenic_actual, benign_actual)
         
-    all_actual, pathogenic_actual, other_actual = _normalize_dicts(all_actual, pathogenic_actual, other_actual)
     expected = Protein().compute_null_expectation_mutational_frequencies(CDS = folded_exome)
     print("The length of the folded exome is {} bp.".format(len(folded_exome)))
-    _save_frequencies('folded_exome', expected, all_actual, pathogenic_actual, other_actual)
+    _save_frequencies('folded_exome', expected, all_actual, pathogenic_actual, benign_actual)
 
 
 ############################
@@ -98,7 +95,7 @@ def compute_folded_exome_mutational_frequencies(proteome_dir):
 
 def _initialize_mutation_frequencies():
     """
-    Initializes three mutational frequency dictionaries for all, pathogenic, and uncertain/benign ("other") variants.
+    Initializes three mutational frequency dictionaries for all, pathogenic, and benign variants.
 
     Returns
     -------
@@ -107,7 +104,7 @@ def _initialize_mutation_frequencies():
     """
     return (Protein()._initialize_mutational_frequencies() for _ in range(3))
 
-def _update_variant_counts(all_variants, all_actual, pathogenic_actual, other_actual):
+def _update_variant_counts(all_variants, all_actual, pathogenic_actual, benign_actual):
     """
     Updates mutational frequency dictionaries based on observed amino acid changes in variants.
 
@@ -119,8 +116,13 @@ def _update_variant_counts(all_variants, all_actual, pathogenic_actual, other_ac
         Dictionary storing counts for all variants
     pathogenic_actual : dict[str:float]
         Dictionary storing counts for pathogenic and likely pathogenic variants
-    other_actual : dict[str:float]
-        Dictionary storing counts for uncertain/benign variants
+    benign_actual : dict[str:float]
+        Dictionary storing counts for benign and likely benign variants
+    
+    Returns
+    -------
+    tuple[dict[str:float]]
+        all_actual, pathogenic_actual, benign_actual
     """
     for variant in all_variants:
         _, aa_change = Protein()._parse_aa_change(variant, whole_change = True)
@@ -129,33 +131,12 @@ def _update_variant_counts(all_variants, all_actual, pathogenic_actual, other_ac
         all_actual[aa_change] += 1
         if all_variants[variant] in ['pathogenic', 'likely pathogenic']:
             pathogenic_actual[aa_change] += 1
-        else:
-            other_actual[aa_change] += 1
+        elif all_variants[variant] in ['benign', 'likely benign']:
+            benign_actual[aa_change] += 1
+    
+    return all_actual, pathogenic_actual, benign_actual
 
-def _normalize_dicts(all_actual, pathogenic_actual, other_actual):
-    """
-    Normalizes three mutational frequency dictionaries so that each sums to 1.
-
-    Parameters
-    ----------
-    all_actual : dict[str:float]
-        Dictionary storing counts for all variants
-    pathogenic_actual : dict[str:float]
-        Dictionary storing counts for pathogenic and likely pathogenic variants
-    other_actual : didict[str:float]ct
-        Dictionary storing counts for uncertain/benign variants
-
-    Returns
-    -------
-    tuple of dict
-        The normalized mutational frequency dictionaries for all, pathogenic, and uncertain/benign variants.
-    """
-    all_actual = Protein()._normalize_mutational_frequencies(all_actual)
-    pathogenic_actual = Protein()._normalize_mutational_frequencies(pathogenic_actual)
-    other_actual = Protein()._normalize_mutational_frequencies(other_actual)
-    return all_actual, pathogenic_actual, other_actual
-
-def _save_frequencies(basepath, expected, all_actual, pathogenic_actual, other_actual):
+def _save_frequencies(basepath, expected, all_actual, pathogenic_actual, benign_actual):
     """
     Saves expected and actual mutational frequencies as JSON files under './data/mutational_frequencies/{basepath}'.
 
@@ -166,11 +147,11 @@ def _save_frequencies(basepath, expected, all_actual, pathogenic_actual, other_a
     expected : dict[str:float]
         Expected mutational frequency dictionary
     all_actual : dict[str:float]
-        Normalized frequencies for all variants
+        Counts for all variants
     pathogenic_actual : dict[str:float]
-        Normalized frequencies for pathogenic and likely pathogenic variants
-    other_actual : dict[str:float]
-        Normalized frequencies for uncertain/benign variants
+        Counts for pathogenic and likely pathogenic variants
+    benign_actual : dict[str:float]
+        Counts for benign and likely benign variants
     """
     expected_basepath = f'./data/mutational_frequencies/{basepath}/expected'
     os.makedirs(expected_basepath, exist_ok = True)
@@ -182,5 +163,5 @@ def _save_frequencies(basepath, expected, all_actual, pathogenic_actual, other_a
         json.dump(all_actual, f, indent = 4)
     with open(os.path.join(actual_basepath, 'pathogenic.json'), 'w') as f:
         json.dump(pathogenic_actual, f, indent = 4)
-    with open(os.path.join(actual_basepath, 'other.json'), 'w') as f:
-        json.dump(other_actual, f, indent = 4)
+    with open(os.path.join(actual_basepath, 'benign.json'), 'w') as f:
+        json.dump(benign_actual, f, indent = 4)
