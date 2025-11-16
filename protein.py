@@ -372,7 +372,7 @@ class Protein:
         # Check that coding sequence is valid
         def is_translation_accurate(coding_sequence):
             coding_sequence = coding_sequence[:len(coding_sequence) - len(coding_sequence) % 3]
-            return self._aa_sequence == ''.join(CODONS.get(coding_sequence[i : i + 3], 'X') for i in range(0, len(coding_sequence), 3))
+            return self.aa_sequence == ''.join(CODONS.get(coding_sequence[i : i + 3], 'X') for i in range(0, len(coding_sequence), 3))
         if (len(coding_sequence) % 3 != 0) or (not is_translation_accurate(coding_sequence)):
             raise Exception("Coding sequence is invalid.")
         
@@ -381,7 +381,7 @@ class Protein:
     def _check_coding_sequence(self):
         def is_translation_accurate(coding_sequence):
             coding_sequence = coding_sequence[:len(coding_sequence) - len(coding_sequence) % 3]
-            return self._aa_sequence == ''.join(CODONS.get(coding_sequence[i : i + 3], 'X') for i in range(0, len(coding_sequence), 3))
+            return self.aa_sequence == ''.join(CODONS.get(coding_sequence[i : i + 3], 'X') for i in range(0, len(coding_sequence), 3))
         return (len(self.coding_sequence) % 3 != 0) or (not is_translation_accurate(self.coding_sequence))
 
     def _fetch_dbSNP_missense_variants(self):
