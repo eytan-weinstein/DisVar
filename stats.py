@@ -256,6 +256,46 @@ def compute_folded_proteome_mutational_frequencies(proteome_dir):
   
     _save_frequencies('folded_proteome', Protein()._normalize_mutational_frequencies(expected), all_observed, pathogenic_observed, benign_observed)
 
+def compute_RGG_IDR_mutational_frequencies(proteome_dir):
+    """
+    Computes and then saves expected and observed mutational frequencies for all disordered RGG-containing regions.
+    These are stored at stored at './data/mutational_frequencies/RGG_IDRs'
+
+    Parameters
+    ----------
+    proteome_dir : str
+        Path to the directory where Protein files for the human proteome have been downloaded by the main method of protein.py
+    """
+    RGG_IDRs = {}
+    with open(os.path.join(BASEPATH, 'data/RGG_IDRs.tsv')) as f:
+        for line in f:
+            RGG_IDR = line.strip().split('_')
+            RGG_IDRs[RGG_IDR[0]] = [int(x) for x in RGG_IDR[2:]]
+
+    expected, all_observed, pathogenic_observed, benign_observed = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(4))
+
+    for UniProt_ID in RGG_IDRs:
+        try:
+            protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
+        except:
+            continue
+        disordered_nt = [((start - 1) * 3, (end - 1) * 3) for start, end in [RGG_IDRs[UniProt_ID]]]
+        for start, end in disordered_nt:
+            if start == 0:
+                start = 3
+            try:
+                flanking_after = protein.coding_sequence[end + 1]
+            except:
+                flanking_after = 'T'
+            disordered_sequence = protein.coding_sequence[start - 1 : end] + flanking_after
+            null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = disordered_sequence)
+            expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
+        all_variants = protein.missense_variants['disordered'] | protein.missense_variants['folded']
+        all_variants = {k: v for k, v in all_variants.items() if (RGG_IDRs[UniProt_ID][0] <= int(k.split(';')[0]) <= RGG_IDRs[UniProt_ID][1])}
+        all_observed, pathogenic_observed, benign_observed = _update_variant_counts(all_variants, all_observed, pathogenic_observed, benign_observed)
+  
+    _save_frequencies('RGG_IDRs', Protein()._normalize_mutational_frequencies(expected), all_observed, pathogenic_observed, benign_observed)
+
 
 ############################
 ###   Helper functions   ###
