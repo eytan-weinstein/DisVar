@@ -1,3 +1,4 @@
+from collections import Counter
 import json
 import matplotlib.pyplot as plt
 import numpy as np
@@ -150,17 +151,14 @@ def compute_exome_mutational_frequencies(proteome_dir):
     proteome_dir : str
         Path to the directory where Protein files for the human proteome have been downloaded by the main method of protein.py
     """
-    exome = ''
-    all_observed, pathogenic_observed, benign_observed = _initialize_mutation_frequencies()
+    expected, all_observed, pathogenic_observed, benign_observed = {}, {}, {}, {}
 
     for UniProt_ID in os.listdir(proteome_dir):
         protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
-        exome += protein.coding_sequence
+        expected = dict(Counter(expected) + Counter(protein.compute_null_expectation_mutational_frequencies()))
         all_variants = protein.missense_variants['disordered'] | protein.missense_variants['folded']
         all_observed, pathogenic_observed, benign_observed = _update_variant_counts(all_variants, all_observed, pathogenic_observed, benign_observed)
-        
-    expected = Protein().compute_null_expectation_mutational_frequencies(CDS = exome)
-    print("The length of the exome is {} bp.".format(len(exome)))
+                
     _save_frequencies('exome', expected, all_observed, pathogenic_observed, benign_observed)
 
 def compute_disordered_exome_mutational_frequencies(proteome_dir):
