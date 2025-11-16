@@ -276,7 +276,7 @@ def compute_RGG_IDR_mutational_frequencies(proteome_dir):
 
     for UniProt_ID in RGG_IDRs:
         try:
-            protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
+            protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID, '.json'))
         except:
             continue
         disordered_nt = [((start - 1) * 3, (end - 1) * 3) for start, end in [RGG_IDRs[UniProt_ID]]]
