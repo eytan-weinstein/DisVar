@@ -4,7 +4,6 @@ channels:
   - conda-forge
 dependencies:
   - python=3.12
-  - jupyter
   - numpy
   - scipy
   - pandas
@@ -35,7 +34,6 @@ dependencies:
       - multidict==6.7.0
       - networkx==3.5
       - -r requirements.txt
-      - pre-commit
       - propcache==0.4.1
       - protfasta==0.1.15.2
       - pybind11==3.0.1
