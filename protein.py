@@ -12,6 +12,9 @@ import re
 import requests
 
 
+BASEPATH = os.path.dirname(os.path.abspath(__file__))
+
+
 AMINO_ACIDS = {
     'Ala': 'A', 'Arg': 'R', 'Asn': 'N', 'Asp': 'D', 'Cys': 'C',
     'Gln': 'Q', 'Glu': 'E', 'Gly': 'G', 'His': 'H', 'Ile': 'I',
@@ -160,42 +163,85 @@ class Protein:
     
     def compute_null_expectation_mutational_frequencies(self, CDS = None):
         """
-        Given a coding sequence, computes a normalized null expectation of the germline mutational frequencies.
+        Given a coding sequence, computes a (non-normalized!) null expectation of the germline mutational frequencies (missense mutations only).
+        These are sourced from trinucleotide substitutions taken from https://github.com/pjshort/dddMAPS/blob/master/data/forSanger_1KG_mutation_rate_table.txt and saved as a json to './data/trinucleotide_substitution_rates.json'
 
         Parameters
         ----------
         CDS : str OR None
             A coding sequence
             If None, will assume the whole coding sequence for this protein
+            Note that this coding sequence must be of length 3x + 2, where x is the number of codons. The + 2 are the flanking bases on either end.
 
         Returns
         -------
         null_expectation_mutational_frequencies : dict[str:float]
-            A dictionary mapping amino acid changes (e.g., "A/G") to their expected proportions among mutations annotated in that sequence 
+            A dictionary mapping amino acid changes (e.g., "A/G") to their expected rates among possible mutations inferred from that sequence 
         """
-        # If CDS is None, pull coding sequence for entire protein
+        # If CDS is None, pull coding sequence for entire protein with the flanking bases from the start and stop codons
         if CDS is None:
-            CDS = self.coding_sequence
+            CDS = self.coding_sequence[2:] + 'T'
 
         # Ensure coding sequence can be separated by codons
-        if len(CDS) < 3:
-            raise Exception("CDS must have at least one codon.")
-        CDS = CDS[:len(CDS) - len(CDS) % 3]
+        if len(CDS) < 5:
+            raise Exception("CDS must have at least one codon with flanking bases on either end.")
+        if (len(CDS) - 2) % 3 != 0:
+            raise Exception("CDS must be of length 3x + 2, where x is the number of codons.")
 
         # Compute a null expectation of the mutational frequencies by sliding along the sequence by codon
-        null_expectation_mutational_frequencies = self._initialize_mutational_frequencies()
-        with open('./data/codon_substitutions.json', 'r') as f:
-            codon_substitutions = json.load(f)
-        it = iter(CDS)
-        for codon in zip(it, it, it):
-            codon_str = ''.join(codon)
-            if codon_str in codon_substitutions:
-                for aa_change, mu in codon_substitutions[codon_str].items():
-                    null_expectation_mutational_frequencies[aa_change] += mu
-        
-        # Normalize mutational frequencies
-        null_expectation_mutational_frequencies = self._normalize_mutational_frequencies(null_expectation_mutational_frequencies)
+        with open(os.path.join(BASEPATH, 'data/trinucleotide_substitution_rates.json'), 'r') as f:
+            trinucleotide_substitution_rates = json.load(f)
+        null_expectation_mutational_frequencies = {}
 
+        for i in range(1, len(CDS) - 1, 3):
+
+            # Extract codon
+            codon = CDS[i:i+3]
+
+            # Extract original amino acid corresponding to that codon
+            original_aa = CODONS[codon]
+
+            # Extract flanking bases 
+            flanking_before = CDS[i-1]
+            flanking_after = CDS[i+3]
+
+            # Compute all possible single nucleotide variants
+            def single_nucleotide_variants(codon):
+                bases = ['A', 'C', 'G', 'T']
+                SNVs = []
+                for i, base in enumerate(codon):
+                    for b in bases:
+                        if b != base:
+                            new_codon = codon[:i] + b + codon[i+1:]
+                            SNVs.append(new_codon)
+                return [SNVs[i:i+3] for i in range(0, 9, 3)]
+            SNVs = single_nucleotide_variants(codon)
+
+            # Compute all possible trinucleotide substitutions
+            for i in range(3):
+                for j in range(3):
+                    substituted_codon = SNVs[i][j]
+                    substituted_aa = CODONS[substituted_codon]
+
+                    # Disregard synonymous substitutions and premature stops
+                    if (substituted_aa == '*') or (original_aa == substituted_aa):
+                        continue
+
+                    if i == 0:
+                        original_trinucleotide = flanking_before + codon[i:i+2]
+                        final_trinucleotide = flanking_before + SNVs[i][j][i:i+2]
+                    elif i == 1:
+                        original_trinucleotide = codon
+                        final_trinucleotide = SNVs[i][j]
+                    else:
+                        original_trinucleotide = codon[i-1:] + flanking_after
+                        final_trinucleotide = SNVs[i][j][i-1:] + flanking_after
+            
+                    # Append expected mutational frequency
+                    aa_change = f"{original_aa}/{substituted_aa}"
+                    aa_change_rate = trinucleotide_substitution_rates[original_trinucleotide][final_trinucleotide]
+                    null_expectation_mutational_frequencies[aa_change] = null_expectation_mutational_frequencies.get(aa_change, 0) + aa_change_rate
+        
         return null_expectation_mutational_frequencies
 
     ###########################
@@ -471,7 +517,7 @@ class Protein:
         variant_summary : pd.DataFrame
             The relevant protein-specific ClinVar variant data
         """
-        variant_summary_path = './data/variant_summary.txt'
+        variant_summary_path = os.path.join(BASEPATH, 'data/variant_summary.txt')
         os.makedirs(os.path.dirname(variant_summary_path), exist_ok = True)
 
         # This can be downloaded periodically as it's updated by NCBI
@@ -570,48 +616,9 @@ class Protein:
         final = aa_change.split('/')[1]
         return position, original, final
     
-    def _build_codon_substitution_table(self):
-        """
-        Builds the null expectation codon substitution table stored at './data/codon_substitutions.json'.
-        """
-        # Null expectation codon substitution frequences from the Wellcome Sanger 1000 Genomes Project
-        codon_substitutions = pd.read_csv("https://raw.githubusercontent.com/pjshort/dddMAPS/master/data/forSanger_1KG_mutation_rate_table.txt", sep = r'\s+')
-
-        # Discount substitutions from start and stop codons
-        codon_substitutions = codon_substitutions[~codon_substitutions['from'].isin(['ATG', 'TAA', 'TAG', 'TGA'])] 
-
-        # Discount substitutions to stop codons
-        codon_substitutions = codon_substitutions[~codon_substitutions['to'].isin(['TAA', 'TAG', 'TGA'])]
-
-        # Map codons to amino acid substitutions
-        codon_substitutions['aa_change'] = codon_substitutions.apply(lambda row: f"{CODONS[row['from']]}/{CODONS[row['to']]}", axis = 1)
-
-        # Normalize codon substituiton frequencies
-        codon_substitutions['mu_snp'] = codon_substitutions['mu_snp'] / codon_substitutions['mu_snp'].sum()
-
-        # Transform to a dictionary mapping codons to their possible amino acid substitutions and their frequencies
-        codon_substitutions = {codon: dict(zip(sub_df['aa_change'], sub_df['mu_snp'])) for codon, sub_df in codon_substitutions.groupby('from')}
-
-        # Save to /data directory
-        with open('./data/codon_substitutions.json', 'w') as f:
-            json.dump(codon_substitutions, f, indent = 4)
-    
-    def _initialize_mutational_frequencies(self):
-        """
-        Initializes a dictionary mapping valid amino changes to mutational frequencies.
-
-        Returns
-        -------
-        mutational_frequencies : dict[str: float]
-            A dictionary mapping valid amino acid changes (e.g., "A/G") to mutational frequencies (all 0.0 upon initialization)
-        """
-        with open('./data/codon_substitutions.json', 'r') as f:
-            codon_substitutions = json.load(f)
-        return {substitution: 0.0 for substitution in (k for v in codon_substitutions.values() for k in v.keys())}
-    
     def _normalize_mutational_frequencies(self, mutational_frequencies):
         """
-        Ensures that mutational frequencies sum to 1.
+        Normalizes such that mutational frequencies sum to 1.
 
         Returns
         -------
