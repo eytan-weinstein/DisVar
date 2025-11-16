@@ -271,12 +271,12 @@ def compute_RGG_IDR_mutational_frequencies(proteome_dir):
         for line in f:
             RGG_IDR = line.strip().split('_')
             RGG_IDRs[RGG_IDR[0]] = [int(x) for x in RGG_IDR[2:]]
-
+    
     expected, all_observed, pathogenic_observed, benign_observed = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(4))
 
     for UniProt_ID in RGG_IDRs:
         try:
-            protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID, '.json'))
+            protein = Protein(file_path = os.path.join(proteome_dir, f'{UniProt_ID}.json'))
         except:
             continue
         disordered_nt = [((start - 1) * 3, (end - 1) * 3) for start, end in [RGG_IDRs[UniProt_ID]]]
