@@ -179,7 +179,7 @@ def compute_proteome_mutational_frequencies(proteome_dir):
     for UniProt_ID in os.listdir(proteome_dir):
         protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
         null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies()
-        expected = {k: expected.get(k, 0) + null_expectation_mutational_frequencies.get(k, 0) for k in set(expected) | set(null_expectation_mutational_frequencies)}
+        expected = {k: expected[k] + null_expectation_mutational_frequencies[k] for k in expected}
         all_variants = protein.missense_variants['disordered'] | protein.missense_variants['folded']
         all_observed, pathogenic_observed, benign_observed = _update_variant_counts(all_variants, all_observed, pathogenic_observed, benign_observed)
                 
@@ -209,7 +209,7 @@ def compute_disordered_proteome_mutational_frequencies(proteome_dir):
                 flanking_after = 'T'
             disordered_sequence = protein.coding_sequence[start - 1 : end] + flanking_after
             null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = disordered_sequence)
-            expected = {k: expected.get(k, 0) + null_expectation_mutational_frequencies.get(k, 0) for k in set(expected) | set(null_expectation_mutational_frequencies)}
+            expected = {k: expected[k] + null_expectation_mutational_frequencies[k] for k in expected}
         all_variants = protein.missense_variants['disordered']
         all_observed, pathogenic_observed, benign_observed = _update_variant_counts(all_variants, all_observed, pathogenic_observed, benign_observed)
   
@@ -250,7 +250,7 @@ def compute_folded_proteome_mutational_frequencies(proteome_dir):
             folded_sequences.append(folded_sequence)
         for folded_sequence in folded_sequences:
             null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = folded_sequence)
-            expected = {k: expected.get(k, 0) + null_expectation_mutational_frequencies.get(k, 0) for k in set(expected) | set(null_expectation_mutational_frequencies)}
+            expected = {k: expected[k] + null_expectation_mutational_frequencies[k] for k in expected}
         all_variants = protein.missense_variants['folded']
         all_observed, pathogenic_observed, benign_observed = _update_variant_counts(all_variants, all_observed, pathogenic_observed, benign_observed)
   
@@ -284,11 +284,14 @@ def _update_variant_counts(all_variants, all_observed, pathogenic_observed, beni
     """
     for variant in all_variants:
         _, aa_change = Protein()._parse_aa_change(variant, whole_change = True)
-        all_observed[aa_change] = all_observed.get(aa_change, 0) + 1
+        if aa_change in all_observed:
+            all_observed[aa_change] = all_observed[aa_change] + 1
+        else:
+            continue
         if all_variants[variant] in ['pathogenic', 'likely pathogenic']:
-            pathogenic_observed[aa_change] = pathogenic_observed.get(aa_change, 0) + 1
+            pathogenic_observed[aa_change] = pathogenic_observed[aa_change] + 1
         elif all_variants[variant] in ['benign', 'likely benign']:
-            benign_observed[aa_change] = benign_observed.get(aa_change, 0) + 1
+            benign_observed[aa_change] = benign_observed[aa_change] + 1
     
     return all_observed, pathogenic_observed, benign_observed
 
