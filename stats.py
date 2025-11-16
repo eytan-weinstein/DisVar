@@ -1,4 +1,3 @@
-from collections import Counter
 import json
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,12 +10,35 @@ from protein import Protein
 BASEPATH = os.path.dirname(os.path.abspath(__file__))
 
 
+POSSIBLE_SNV_AA_CONSEQUENCES = {
+'F/I': 0, 'F/L': 0, 'F/V': 0, 'F/Y': 0, 'F/S': 0, 'F/C': 0,
+'L/I': 0, 'L/V': 0, 'L/S': 0, 'L/F': 0, 'L/M': 0, 'L/W': 0, 'L/H': 0, 'L/P': 0, 'L/R': 0, 'L/Q': 0,
+'I/L': 0, 'I/V': 0, 'I/F': 0, 'I/N': 0, 'I/T': 0, 'I/S': 0, 'I/M': 0, 'I/K': 0, 'I/R': 0, 
+'M/L': 0, 'M/V': 0, 'M/K': 0, 'M/T': 0, 'M/R': 0, 'M/I': 0,
+'V/I': 0, 'V/L': 0, 'V/F': 0, 'V/D': 0, 'V/A': 0, 'V/G': 0, 'V/E': 0, 'V/M': 0,
+'S/T': 0, 'S/P': 0, 'S/A': 0, 'S/Y': 0, 'S/C': 0, 'S/F': 0, 'S/L': 0, 'S/W': 0, 'S/R': 0, 'S/G': 0, 'S/N': 0, 'S/I': 0,
+'P/T': 0, 'P/A': 0, 'P/S': 0,'P/H': 0, 'P/R': 0, 'P/L': 0, 'P/Q': 0,
+'T/P': 0, 'T/A': 0, 'T/S': 0, 'T/N': 0, 'T/I': 0, 'T/K': 0, 'T/R': 0, 'T/M': 0,
+'A/T': 0, 'A/P': 0, 'A/S': 0, 'A/D': 0, 'A/G': 0, 'A/V': 0, 'A/E': 0,
+'Y/N': 0, 'Y/H': 0, 'Y/D': 0, 'Y/S': 0, 'Y/C': 0, 'Y/F': 0,
+'H/N': 0, 'H/D': 0, 'H/Y': 0, 'H/P': 0, 'H/R': 0, 'H/L': 0, 'H/Q': 0,
+'Q/K': 0, 'Q/E': 0, 'Q/P': 0, 'Q/R': 0, 'Q/L': 0, 'Q/H': 0,
+'N/H': 0, 'N/D': 0, 'N/Y': 0, 'N/T': 0, 'N/S': 0, 'N/I': 0, 'N/K': 0,
+'K/Q': 0, 'K/E': 0, 'K/T': 0, 'K/R': 0, 'K/I': 0, 'K/N': 0, 'K/M': 0,
+'D/N': 0, 'D/H': 0, 'D/Y': 0, 'D/A': 0, 'D/G': 0, 'D/V': 0, 'D/E': 0,
+'E/K': 0, 'E/Q': 0, 'E/A': 0, 'E/G': 0, 'E/V': 0, 'E/D': 0,
+'C/S': 0, 'C/R': 0, 'C/G': 0, 'C/Y': 0, 'C/F': 0, 'C/W': 0, 
+'W/R': 0, 'W/G': 0, 'W/S': 0, 'W/L': 0, 'W/C': 0,
+'R/S': 0, 'R/G': 0, 'R/C': 0, 'R/H': 0, 'R/P': 0, 'R/L': 0, 'R/Q': 0, 'R/W': 0, 'R/K': 0, 'R/T': 0, 'R/I': 0, 'R/M': 0,
+'G/S': 0, 'G/R': 0, 'G/C': 0, 'G/D': 0, 'G/A': 0, 'G/V': 0, 'G/E': 0, 'G/W': 0}
+
+
 ##########################
 ###   Core functions   ###
 ##########################
 
 
-def find_pathogenic_residues(group = 'disordered_exome', aa_change = False, plot_title = 'Pathogenic Missense Variants by Amino Acid, All Disordered Regions'):
+def find_pathogenic_residues(group = 'disordered_proteome', aa_change = False, plot_title = 'Pathogenic Missense Variants by Amino Acid, All Disordered Regions'):
     """
     Finds residues enriched for pathogenicity by log₂FC pathogenic/expected and log₂FC pathogenic/benign. 
     The results are returned as a table of enrichment scores, and a figure of multiple plots is generated.
@@ -141,80 +163,97 @@ def find_pathogenic_residues(group = 'disordered_exome', aa_change = False, plot
 
     return enrichment_scores, fig
 
-def compute_exome_mutational_frequencies(proteome_dir):
+def compute_proteome_mutational_frequencies(proteome_dir):
     """
-    Computes and then saves expected and observed mutational frequencies for the human exome.
-    These are stored at stored at './data/mutational_frequencies/exome'
+    Computes and then saves expected and observed mutational frequencies for the human proteome.
+    These are stored at stored at './data/mutational_frequencies/proteome'
 
     Parameters
     ----------
     proteome_dir : str
         Path to the directory where Protein files for the human proteome have been downloaded by the main method of protein.py
     """
-    expected, all_observed, pathogenic_observed, benign_observed = {}, {}, {}, {}
+    expected, all_observed, pathogenic_observed, benign_observed = POSSIBLE_SNV_AA_CONSEQUENCES, POSSIBLE_SNV_AA_CONSEQUENCES, POSSIBLE_SNV_AA_CONSEQUENCES, POSSIBLE_SNV_AA_CONSEQUENCES
 
     for UniProt_ID in os.listdir(proteome_dir):
         protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
-        expected = dict(Counter(expected) + Counter(protein.compute_null_expectation_mutational_frequencies()))
+        null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies()
+        expected = {k: expected.get(k, 0) + null_expectation_mutational_frequencies.get(k, 0) for k in set(expected) | set(null_expectation_mutational_frequencies)}
         all_variants = protein.missense_variants['disordered'] | protein.missense_variants['folded']
         all_observed, pathogenic_observed, benign_observed = _update_variant_counts(all_variants, all_observed, pathogenic_observed, benign_observed)
                 
-    _save_frequencies('exome', expected, all_observed, pathogenic_observed, benign_observed)
+    _save_frequencies('proteome', Protein()._normalize_mutational_frequencies(expected), all_observed, pathogenic_observed, benign_observed)
 
-def compute_disordered_exome_mutational_frequencies(proteome_dir):
+def compute_disordered_proteome_mutational_frequencies(proteome_dir):
     """
-    Computes and then saves expected and observed mutational frequencies for the disordered human exome.
-    These are stored at stored at './data/mutational_frequencies/disordered_exome'
+    Computes and then saves expected and observed mutational frequencies for the disordered human proteome.
+    These are stored at stored at './data/mutational_frequencies/disordered_proteome'
 
     Parameters
     ----------
     proteome_dir : str
         Path to the directory where Protein files for the human proteome have been downloaded by the main method of protein.py
     """
-    disordered_exome = ''
-    all_observed, pathogenic_observed, benign_observed = _initialize_mutation_frequencies()
+    expected, all_observed, pathogenic_observed, benign_observed = POSSIBLE_SNV_AA_CONSEQUENCES, POSSIBLE_SNV_AA_CONSEQUENCES, POSSIBLE_SNV_AA_CONSEQUENCES, POSSIBLE_SNV_AA_CONSEQUENCES
 
     for UniProt_ID in os.listdir(proteome_dir):
         protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
         disordered_nt = [(start * 3, end * 3) for start, end in protein.disordered_regions]
         for start, end in disordered_nt:
-            disordered_exome += protein.coding_sequence[start : end]
+            if start == 0:
+                start = 3
+            try:
+                flanking_after = protein.coding_sequence[end + 1]
+            except:
+                flanking_after = 'T'
+            disordered_sequence = protein.coding_sequence[start - 1 : end] + flanking_after
+            null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = disordered_sequence)
+            expected = {k: expected.get(k, 0) + null_expectation_mutational_frequencies.get(k, 0) for k in set(expected) | set(null_expectation_mutational_frequencies)}
         all_variants = protein.missense_variants['disordered']
         all_observed, pathogenic_observed, benign_observed = _update_variant_counts(all_variants, all_observed, pathogenic_observed, benign_observed)
-        
-    expected = Protein().compute_null_expectation_mutational_frequencies(CDS = disordered_exome)
-    print("The length of the disordered exome is {} bp.".format(len(disordered_exome)))
-    _save_frequencies('disordered_exome', expected, all_observed, pathogenic_observed, benign_observed)
+  
+    _save_frequencies('disordered_proteome', Protein()._normalize_mutational_frequencies(expected), all_observed, pathogenic_observed, benign_observed)
 
-def compute_folded_exome_mutational_frequencies(proteome_dir):
+def compute_folded_proteome_mutational_frequencies(proteome_dir):
     """
-    Computes and then saves expected and observed mutational frequencies for the folded human exome.
-    These are stored at stored at './data/mutational_frequencies/folded_exome'
+    Computes and then saves expected and observed mutational frequencies for the folded human proteome.
+    These are stored at stored at './data/mutational_frequencies/folded_proteome'
 
     Parameters
     ----------
     proteome_dir : str
         Path to the directory where Protein files for the human proteome have been downloaded by the main method of protein.py
     """
-    folded_exome = ''
-    all_observed, pathogenic_observed, benign_observed = _initialize_mutation_frequencies()
+    expected, all_observed, pathogenic_observed, benign_observed = POSSIBLE_SNV_AA_CONSEQUENCES, POSSIBLE_SNV_AA_CONSEQUENCES, POSSIBLE_SNV_AA_CONSEQUENCES, POSSIBLE_SNV_AA_CONSEQUENCES
 
     for UniProt_ID in os.listdir(proteome_dir):
         protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
         disordered_nt = [(start * 3, end * 3) for start, end in protein.disordered_regions]
+        folded_sequences = []
         prev_end = 0
         for start, end in disordered_nt:
             if start > prev_end:
-                folded_exome += protein.coding_sequence[prev_end : start]
+                if prev_end == 0:
+                    prev_end = 3
+                try:
+                    flanking_after = protein.coding_sequence[start + 1]
+                except:
+                    flanking_after = 'T'
+                folded_sequence = protein.coding_sequence[prev_end - 1 : start] + flanking_after
+                folded_sequences.append(folded_sequence)
             prev_end = end
         if prev_end < len(protein.coding_sequence):
-            folded_exome += protein.coding_sequence[prev_end : ]
+            if prev_end == 0:
+                prev_end = 3
+            folded_sequence = protein.coding_sequence[prev_end - 1 : ] + 'T'
+            folded_sequences.append(folded_sequence)
+        for folded_sequence in folded_sequences:
+            null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = folded_sequence)
+            expected = {k: expected.get(k, 0) + null_expectation_mutational_frequencies.get(k, 0) for k in set(expected) | set(null_expectation_mutational_frequencies)}
         all_variants = protein.missense_variants['folded']
         all_observed, pathogenic_observed, benign_observed = _update_variant_counts(all_variants, all_observed, pathogenic_observed, benign_observed)
-        
-    expected = Protein().compute_null_expectation_mutational_frequencies(CDS = folded_exome)
-    print("The length of the folded exome is {} bp.".format(len(folded_exome)))
-    _save_frequencies('folded_exome', expected, all_observed, pathogenic_observed, benign_observed)
+  
+    _save_frequencies('folded_proteome', Protein()._normalize_mutational_frequencies(expected), all_observed, pathogenic_observed, benign_observed)
 
 
 ############################
