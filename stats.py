@@ -315,28 +315,24 @@ def compute_NARDINI_IDR_cluster_mutational_frequencies(proteome_dir):
         expected, all_observed, pathogenic_observed, benign_observed = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(4))
 
         for UniProt_ID, start_position, end_position in zip(IDRs['Uniprot'], IDRs['Start Pos'], IDRs['End Pos']):
-            try:
+            try: 
                 protein = Protein(file_path = os.path.join(proteome_dir, f'{UniProt_ID}.json'))
+                disordered_nt = [(start * 3, end * 3) for start, end in [[start_position, end_position]]]
+                for start, end in disordered_nt:
+                    if start == 0:
+                        start = 3
+                    try:
+                        flanking_after = protein.coding_sequence[end + 1]
+                    except:
+                        flanking_after = 'T'
+                    disordered_sequence = protein.coding_sequence[start - 1 : end] + flanking_after
+                    null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = disordered_sequence)
+                    expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
+                all_variants = protein.missense_variants['disordered'] | protein.missense_variants['folded']
+                all_variants = {k: v for k, v in all_variants.items() if ((start_position + 1) <= int(k.split(';')[0]) <= (end_position + 1))}
+                all_observed, pathogenic_observed, benign_observed = _update_variant_counts(all_variants, all_observed, pathogenic_observed, benign_observed)
             except:
                 continue
-            disordered_nt = [(start * 3, end * 3) for start, end in [[start_position, end_position]]]
-            for start, end in disordered_nt:
-                if start == 0:
-                    start = 3
-                try:
-                    flanking_after = protein.coding_sequence[end + 1]
-                except:
-                    flanking_after = 'T'
-                disordered_sequence = protein.coding_sequence[start - 1 : end] + flanking_after
-                try:
-                    null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = disordered_sequence)
-                except:
-                    null_expectation_mutational_frequencies = {}
-                    print(UniProt_ID)
-                expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
-            all_variants = protein.missense_variants['disordered'] | protein.missense_variants['folded']
-            all_variants = {k: v for k, v in all_variants.items() if ((start_position + 1) <= int(k.split(';')[0]) <= (end_position + 1))}
-            all_observed, pathogenic_observed, benign_observed = _update_variant_counts(all_variants, all_observed, pathogenic_observed, benign_observed)
         
         _save_frequencies(f'NARDINI_IDRs_Cluster_{cluster}', Protein()._normalize_mutational_frequencies(expected), all_observed, pathogenic_observed, benign_observed)
 
