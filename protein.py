@@ -178,7 +178,7 @@ class Protein:
         null_expectation_mutational_frequencies : dict[str:float]
             A dictionary mapping amino acid changes (e.g., "A/G") to their expected rates among possible mutations inferred from that sequence 
         """
-        # If CDS is None, pull coding sequence for entire protein with the flanking bases from the start and stop codons
+        # If CDS is None, pull coding sequence for entire protein with the flanking bases from the last of the start codon and first of the stop codons
         if CDS is None:
             CDS = self.coding_sequence[2:] + 'T'
 
