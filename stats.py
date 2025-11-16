@@ -1,3 +1,4 @@
+from copy import deepcopy
 import json
 import matplotlib.pyplot as plt
 import numpy as np
@@ -173,7 +174,7 @@ def compute_proteome_mutational_frequencies(proteome_dir):
     proteome_dir : str
         Path to the directory where Protein files for the human proteome have been downloaded by the main method of protein.py
     """
-    expected, all_observed, pathogenic_observed, benign_observed = POSSIBLE_SNV_AA_CONSEQUENCES, POSSIBLE_SNV_AA_CONSEQUENCES, POSSIBLE_SNV_AA_CONSEQUENCES, POSSIBLE_SNV_AA_CONSEQUENCES
+    expected, all_observed, pathogenic_observed, benign_observed = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(4))
 
     for UniProt_ID in os.listdir(proteome_dir):
         protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
@@ -194,7 +195,7 @@ def compute_disordered_proteome_mutational_frequencies(proteome_dir):
     proteome_dir : str
         Path to the directory where Protein files for the human proteome have been downloaded by the main method of protein.py
     """
-    expected, all_observed, pathogenic_observed, benign_observed = POSSIBLE_SNV_AA_CONSEQUENCES, POSSIBLE_SNV_AA_CONSEQUENCES, POSSIBLE_SNV_AA_CONSEQUENCES, POSSIBLE_SNV_AA_CONSEQUENCES
+    expected, all_observed, pathogenic_observed, benign_observed = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(4))
 
     for UniProt_ID in os.listdir(proteome_dir):
         protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
@@ -224,7 +225,7 @@ def compute_folded_proteome_mutational_frequencies(proteome_dir):
     proteome_dir : str
         Path to the directory where Protein files for the human proteome have been downloaded by the main method of protein.py
     """
-    expected, all_observed, pathogenic_observed, benign_observed = POSSIBLE_SNV_AA_CONSEQUENCES, POSSIBLE_SNV_AA_CONSEQUENCES, POSSIBLE_SNV_AA_CONSEQUENCES, POSSIBLE_SNV_AA_CONSEQUENCES
+    expected, all_observed, pathogenic_observed, benign_observed = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(4))
 
     for UniProt_ID in os.listdir(proteome_dir):
         protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
