@@ -328,7 +328,11 @@ def compute_NARDINI_IDR_cluster_mutational_frequencies(proteome_dir):
                 except:
                     flanking_after = 'T'
                 disordered_sequence = protein.coding_sequence[start - 1 : end] + flanking_after
-                null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = disordered_sequence)
+                try:
+                    null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = disordered_sequence)
+                except:
+                    null_expectation_mutational_frequencies = {}
+                    print(UniProt_ID)
                 expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
             all_variants = protein.missense_variants['disordered'] | protein.missense_variants['folded']
             all_variants = {k: v for k, v in all_variants.items() if ((start_position + 1) <= int(k.split(';')[0]) <= (end_position + 1))}
