@@ -364,6 +364,8 @@ def compute_NARDINI_IDR_cluster_size(proteome_dir):
                 continue
         
         cluster_sizes[cluster] = cluster_size
+    
+    return cluster_sizes
         
 
 ############################
