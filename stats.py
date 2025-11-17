@@ -41,7 +41,7 @@ POSSIBLE_SNV_AA_CONSEQUENCES = {
 
 def find_pathogenic_residues(group = 'disordered_proteome', condition = 'original', plot_title = 'Pathogenic Missense Variants by Amino Acid, All Disordered Regions'):
     """
-    Finds residues enriched for pathogenicity by log₂FC pathogenic/expected and log₂FC pathogenic/benign. 
+    Finds residues enriched for pathogenicity by O/E pathogenic/expected and O/E pathogenic/benign. 
     The results are returned as a table of enrichment scores, and a figure of multiple plots is generated.
 
     Parameters
