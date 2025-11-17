@@ -336,6 +336,35 @@ def compute_NARDINI_IDR_cluster_mutational_frequencies(proteome_dir):
         
         _save_frequencies(f'NARDINI_IDRs_Cluster_{cluster}', Protein()._normalize_mutational_frequencies(expected), all_observed, pathogenic_observed, benign_observed)
 
+def compute_NARDINI_IDR_cluster_size(proteome_dir):
+    NARDINI_IDR_clusters = pd.read_csv(os.path.join(BASEPATH, 'data/NARDINI_IDR_clusters.csv'))
+
+    cluster_sizes = {}
+
+    for cluster in range(0, 30):
+
+        IDRs = NARDINI_IDR_clusters[NARDINI_IDR_clusters['Cluster Number'] == cluster]
+
+        cluster_size = 0
+
+        for UniProt_ID, start_position, end_position in zip(IDRs['Uniprot'], IDRs['Start Pos'], IDRs['End Pos']):
+            try: 
+                protein = Protein(file_path = os.path.join(proteome_dir, f'{UniProt_ID}.json'))
+                disordered_nt = [(start * 3, end * 3) for start, end in [[start_position, end_position]]]
+                for start, end in disordered_nt:
+                    if start == 0:
+                        start = 3
+                    try:
+                        flanking_after = protein.coding_sequence[end + 1]
+                    except:
+                        flanking_after = 'T'
+                    disordered_sequence = protein.coding_sequence[start - 1 : end] + flanking_after
+                    cluster_size += len(disordered_sequence) - 2
+            except:
+                continue
+        
+        cluster_sizes[cluster] = cluster_size
+        
 
 ############################
 ###   Helper functions   ###
