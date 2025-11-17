@@ -1,9 +1,9 @@
 from copy import deepcopy
 import json
 import matplotlib.pyplot as plt
-import numpy as np
 import os
 import pandas as pd
+from scipy.stats import fisher_exact
 
 from protein import Protein
 
@@ -39,7 +39,7 @@ POSSIBLE_SNV_AA_CONSEQUENCES = {
 ##########################
 
 
-def find_pathogenic_residues(group = 'disordered_proteome', aa_change = False, plot_title = 'Pathogenic Missense Variants by Amino Acid, All Disordered Regions'):
+def find_pathogenic_residues(group = 'disordered_proteome', condition = 'original', plot_title = 'Pathogenic Missense Variants by Amino Acid, All Disordered Regions'):
     """
     Finds residues enriched for pathogenicity by log₂FC pathogenic/expected and log₂FC pathogenic/benign. 
     The results are returned as a table of enrichment scores, and a figure of multiple plots is generated.
@@ -48,8 +48,8 @@ def find_pathogenic_residues(group = 'disordered_proteome', aa_change = False, p
     ----------
     group : str
         The group of proteins of interest. This must correspond to a folder name in data/mutational_frequencies 
-    aa_change : bool
-        If True, enrichments will be computed over amino acid changes (e.g. T/M) instead of the amino acids themselves
+    aa_change : str from ['original', 'substituted', 'aa_change']
+        Whether to compute enrichments over the original amino acid, substituted amino acid, or amino acid change
     plot_title : str
         The title to give to the figure of multiple plots
     
@@ -69,66 +69,79 @@ def find_pathogenic_residues(group = 'disordered_proteome', aa_change = False, p
     with open(os.path.join(mutational_frequencies, group, 'observed/benign.json'), 'r') as file:
         benign = json.load(file)
     
-    # Combine by source amino acid
-    if not aa_change:
+    # Combine by original/substituted amino acid
+    if condition != 'aa_change':
+
+        if condition == 'substituted':
+            i = 1
+        else:
+            i = 0
 
         expected_combined = {}
         for k, v in expected.items():
-            src = k.split('/')[0]
+            src = k.split('/')[i]
             expected_combined[src] = expected_combined.get(src, 0) + v
         expected = expected_combined
 
         pathogenic_combined = {}
         for k, v in pathogenic.items():
-            src = k.split('/')[0]
+            src = k.split('/')[i]
             pathogenic_combined[src] = pathogenic_combined.get(src, 0) + v
         pathogenic = pathogenic_combined
 
         benign_combined = {}
         for k, v in benign.items():
-            src = k.split('/')[0]
+            src = k.split('/')[i]
             benign_combined[src] = benign_combined.get(src, 0) + v
         benign = benign_combined
     
     # Calculate enrichment of pathogenic variants relative to expected mutability 
-    pathogenic_to_expected_enrichment_scores = {}
-    pathogenic_normalized = Protein()._normalize_mutational_frequencies(pathogenic)
-    for k, v in pathogenic_normalized.items():
-        eps = 1e-9
-        pathogenic_to_expected_enrichment_scores[k] = np.log2((v + eps) / (expected[k] + eps))
-
+    pathogenic_to_expected_p_vals = {}
+    pathogenic_to_expected_odds = {}
+    total_pathogenic = sum(pathogenic.values())
+    for k, v in pathogenic.items():
+        a = pathogenic[k]
+        c = round(expected[k] * total_pathogenic)
+        b = total_pathogenic - a
+        d = total_pathogenic - c
+        table = [[a, b],[c, d]]
+        odds, p_val = fisher_exact(table, alternative = 'greater')
+        pathogenic_to_expected_p_vals[k] = p_val
+        pathogenic_to_expected_odds[k] = odds
+        
     # Calculate enrichment of pathogenic variants relative to benign variants
-    pathogenic_to_benign_enrichment_scores = {}
-    total_pathogenic_count = sum(pathogenic.values())
-    total_benign_count = sum(benign.values())
+    pathogenic_to_benign_p_vals = {}
+    pathogenic_to_benign_odds = {}
+    total_benign = sum(benign.values())
     for k, v in pathogenic.items():
-        eps = 1e-9
-        pathogenic_to_benign_enrichment_scores[k] = np.log2(((v + eps) / (benign[k] + eps)) / (((total_pathogenic_count - v) + eps) / ((total_benign_count - benign[k]) + eps)))
-    
-    # Calculate combined enrichment score
-    combined_enrichment_score = {}
-    for k, v in pathogenic.items():
-        combined_enrichment_score[k] = pathogenic_to_expected_enrichment_scores[k] + pathogenic_to_benign_enrichment_scores[k]
+        a = pathogenic[k]
+        c = benign[k]
+        b = total_pathogenic - a
+        d = total_benign - c
+        table = [[a, b],[c, d]]
+        odds, p_val = fisher_exact(table, alternative = 'greater')
+        pathogenic_to_benign_p_vals[k] = p_val
+        pathogenic_to_benign_odds[k] = odds
     
     # Combine enrichment scores into final table
-    enrichment_scores = pd.DataFrame([pathogenic_to_expected_enrichment_scores, pathogenic_to_benign_enrichment_scores, combined_enrichment_score]).T
-    enrichment_scores.columns = ['log₂FC pathogenic/expected', 'log₂FC pathogenic/benign', 'log₂FC pathogenic/expected + log₂FC pathogenic/benign']
-    enrichment_scores = enrichment_scores.sort_values(by = 'log₂FC pathogenic/expected + log₂FC pathogenic/benign', ascending = False)
+    enrichment_scores = pd.DataFrame([pathogenic_to_expected_p_vals, pathogenic_to_expected_odds, pathogenic_to_benign_p_vals, pathogenic_to_benign_odds]).T
+    enrichment_scores.columns = ['p-val pathogenic/expected', 'O/E pathogenic/expected', 'p-val pathogenic/benign', 'O/E pathogenic/benign']
+    enrichment_scores = enrichment_scores.sort_values(by = 'p-val pathogenic/expected', ascending = True)
 
     # Subplots
-    fig, (ax0, ax1, ax2) = plt.subplots(3, 1, sharex = True, figsize = (8, 11), gridspec_kw = {'height_ratios': [1, 2, 1]})
-    fig.suptitle(plot_title, fontsize = 14, y = 0.98)
+    fig, (ax0, ax1) = plt.subplots(2, 1, sharex = True, figsize = (8, 11), gridspec_kw = {'height_ratios': [1, 2]})
+    fig.suptitle(plot_title, fontsize = 10, y = 0.98)
     fig.subplots_adjust(top = 0.92)  
     amino_acids = sorted(expected.keys())
     point_size = 40
-    if aa_change:
+    if condition == 'aa_change':
         point_size = 20
 
     # Absolute frequency plot
     ax0.bar(amino_acids, [pathogenic[amino_acid] for amino_acid in amino_acids], color = 'lime', alpha = 0.7)
     ax0.set_ylabel('absolute frequency', fontsize = 10)
     ax0.tick_params(axis = 'x', labelbottom = True)
-    if aa_change:
+    if condition == 'aa_change':
         ax0.set_xticks(range(len(amino_acids)))
         ax0.set_xticklabels(amino_acids, rotation = 90, fontsize = 5)
     
@@ -136,29 +149,17 @@ def find_pathogenic_residues(group = 'disordered_proteome', aa_change = False, p
     expected_y = [expected[a] for a in amino_acids]
     benign_normalized = Protein()._normalize_mutational_frequencies(benign)
     benign_normalized_y = [benign_normalized[a] for a in amino_acids]
-    pathogenic_normalized_y = [pathogenic_normalized[a] for a in amino_acids]
+    pathogenic_normalized_y = [Protein()._normalize_mutational_frequencies(pathogenic)[a] for a in amino_acids]
     ax1.scatter(amino_acids, expected_y, s = point_size, color = 'blue', label = 'expected')
     ax1.scatter(amino_acids, pathogenic_normalized_y, s = point_size, color = 'red', label = 'pathogenic')
     ax1.scatter(amino_acids, benign_normalized_y, s = point_size, color = 'green', label = 'benign')
     ax1.tick_params(axis = 'x', labelbottom = True)
-    if aa_change:
+    if condition == 'aa_change':
         ax1.set_xticks(range(len(amino_acids)))
         ax1.set_xticklabels(amino_acids, rotation = 90, fontsize = 5)
     ax1.set_ylabel('relative frequency', fontsize = 10)
     ax1.set_ylim(0, max(expected_y + benign_normalized_y + pathogenic_normalized_y) + 0.02)
     ax1.legend()
-
-    # Enrichment plot
-    ax2.scatter(amino_acids, [pathogenic_to_expected_enrichment_scores[a] for a in amino_acids], s = point_size, color = 'blue', label = 'log₂FC pathogenic/expected')
-    ax2.scatter(amino_acids, [pathogenic_to_benign_enrichment_scores[a] for a in amino_acids], s = point_size, color = 'green', label = 'log₂FC pathogenic/benign')
-    ax2.axhline(0.0, color = 'black', linestyle = ':')
-    ax2.tick_params(axis = 'x', labelbottom = True)
-    if aa_change:
-        ax2.set_xticks(range(len(amino_acids)))
-        ax2.set_xticklabels(amino_acids, rotation = 90, fontsize = 5)
-    ax2.set_ylabel('enrichment', fontsize = 10)
-    ax2.set_xlabel('amino acid', fontsize = 10)
-    ax2.legend()
 
     plt.close(fig)
 
