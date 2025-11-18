@@ -336,6 +336,16 @@ def compute_NARDINI_IDR_cluster_mutational_frequencies(proteome_dir):
                 continue
         
         _save_frequencies(f'NARDINI_IDRs_Cluster_{cluster}', Protein()._normalize_mutational_frequencies(expected), all_observed, pathogenic_observed, benign_observed)
+
+def count_mutations_by_IDR(proteome_dir):
+    mutations_by_IDR = {}
+    for UniProt_ID in os.listdir(proteome_dir):
+        protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
+        pathogenic_mutation_count = 0
+        for _, v in protein.missense_variants['disordered'].items():
+            if v in ['pathogenic', 'likely pathogenic']:
+                pathogenic_mutation_count += 1
+        mutations_by_IDR[[protein.protein_name, UniProt_ID]] = pathogenic_mutation_count
         
 
 ############################
