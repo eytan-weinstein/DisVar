@@ -33,6 +33,9 @@ POSSIBLE_SNV_AA_CONSEQUENCES = {
 'R/S': 0, 'R/G': 0, 'R/C': 0, 'R/H': 0, 'R/P': 0, 'R/L': 0, 'R/Q': 0, 'R/W': 0, 'R/K': 0, 'R/T': 0, 'R/I': 0, 'R/M': 0,
 'G/S': 0, 'G/R': 0, 'G/C': 0, 'G/D': 0, 'G/A': 0, 'G/V': 0, 'G/E': 0, 'G/W': 0}
 
+# Not true IDPs
+COLLAGENS = ["COL1A1", "COL1A2", "COL2A1", "COL3A1", "COL4A1", "COL4A2", "COL4A3", "COL4A4", "COL5A1", "COL5A2", "COL6A1", "COL6A2", "COL6A3", "COL7A1", "COL11A1", "COL17A1", "FN1", "FBN1", "COMP", "PKD1", "EDA", "COL12A1", "COL27A1", "COL10A1", "COL8A2", "COL25A1", "COLQ"]
+
 
 ##########################
 ###   Core functions   ###
@@ -200,6 +203,11 @@ def compute_disordered_proteome_mutational_frequencies(proteome_dir):
 
     for UniProt_ID in os.listdir(proteome_dir):
         protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
+
+        # Exclude collagens and other coiled coil/structural ECM-associated proteins
+        if protein.protein_name in COLLAGENS:
+            continue 
+        
         disordered_nt = [(start * 3, end * 3) for start, end in protein.disordered_regions]
         for start, end in disordered_nt:
             if start == 0:
@@ -336,18 +344,6 @@ def compute_NARDINI_IDR_cluster_mutational_frequencies(proteome_dir):
                 continue
         
         _save_frequencies(f'NARDINI_IDRs_Cluster_{cluster}', Protein()._normalize_mutational_frequencies(expected), all_observed, pathogenic_observed, benign_observed)
-
-def count_mutations_by_IDR(proteome_dir):
-    mutations_by_IDR = {}
-    for UniProt_ID in os.listdir(proteome_dir):
-        protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
-        pathogenic_mutation_count = 0
-        for _, v in protein.missense_variants['disordered'].items():
-            if v in ['pathogenic', 'likely pathogenic']:
-                pathogenic_mutation_count += 1
-        mutations_by_IDR[f'{protein.protein_name}_{UniProt_ID}'] = pathogenic_mutation_count
-    
-    return mutations_by_IDR
         
 
 ############################
