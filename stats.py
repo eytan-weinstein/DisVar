@@ -42,7 +42,7 @@ COLLAGENS = ["COL1A1", "COL1A2", "COL2A1", "COL3A1", "COL4A1", "COL4A2", "COL4A3
 ##########################
 
 
-def find_pathogenic_residues(group = 'disordered_proteome', condition = 'original', plot_title = 'Pathogenic Missense Variants by Amino Acid, All Disordered Regions'):
+def find_pathogenic_residues(group = 'disordered_proteome', condition = 'original', plot_title = 'Pathogenic Missense Variants by Original Amino Acid, All Disordered Regions'):
     """
     Finds residues enriched for pathogenicity by O/E pathogenic/expected and O/E pathogenic/benign. 
     The results are returned as a table of enrichment scores, and a figure of multiple plots is generated.
@@ -207,7 +207,7 @@ def compute_disordered_proteome_mutational_frequencies(proteome_dir):
         # Exclude collagens and other coiled coil/structural ECM-associated proteins
         if protein.protein_name in COLLAGENS:
             continue 
-        
+
         disordered_nt = [(start * 3, end * 3) for start, end in protein.disordered_regions]
         for start, end in disordered_nt:
             if start == 0:
