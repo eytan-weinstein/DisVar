@@ -346,6 +346,8 @@ def count_mutations_by_IDR(proteome_dir):
             if v in ['pathogenic', 'likely pathogenic']:
                 pathogenic_mutation_count += 1
         mutations_by_IDR[f'{protein.protein_name}_{UniProt_ID}'] = pathogenic_mutation_count
+    
+    return mutations_by_IDR
         
 
 ############################
