@@ -578,15 +578,15 @@ class Protein:
 
             async def safe_execute():
                 # Retry with exponential backoff
-                for attempt in range(5):
+                attempt = 0
+                while True:
                     try:
-                        result = await client.execute_async(query, variable_values = {"gene_symbol": gene_symbol})
-                        return result
+                        return await client.execute_async(query, variable_values = {"gene_symbol": gene_symbol})
                     except Exception as e:
                         wait = 2 ** attempt
                         print(f"Request failed ({e}) → retrying in {wait}s...")
                         await asyncio.sleep(wait)
-                raise RuntimeError(f"Failed to fetch variants for gene {gene_symbol} after retries")
+                        attempt = min(attempt + 1, 10)
             result = await safe_execute()
 
             # Filter to rare missense variants
