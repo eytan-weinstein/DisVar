@@ -79,7 +79,8 @@ class Protein:
         'aa_sequence',
         'coding_sequence',
         'disordered_regions',
-        'dbSNP_missense_variants')
+        'dbSNP_missense_variants',
+        'gnomAD_missense_variants')
 
     def __init__(self, file_path = None, UniProt_ID = None):
         """
@@ -729,7 +730,8 @@ if __name__ == "__main__":
             file_path = os.path.join(args.save_dir, f"{uid}.json")
             if os.path.exists(file_path):
                 protein = Protein(file_path = file_path)
-                protein.gnomAD_missense_variants = protein._annotate_missense_variants(protein._fetch_gnomAD_missense_variants())
+                if not hasattr(protein, 'gnomAD_missense_variants'):
+                    protein.gnomAD_missense_variants = protein._annotate_missense_variants(protein._fetch_gnomAD_missense_variants())
             else:
                 protein = Protein(UniProt_ID = uid)
             protein.save(save_dir = args.save_dir)
