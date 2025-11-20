@@ -1,6 +1,5 @@
-# Script for download mutational data for the entire human proteome
-
 #!/bin/bash
+# Script for downloading mutational data for the entire human proteome
 # nohup bash run_batches.sh > nohup.txt &
 
 UNIPROT_FILE="/valr/eytan/projects/DisVar/data/human_UniProt_IDs.tsv"
@@ -9,18 +8,11 @@ SAVE_DIR="/neuhaus/eytan/DisVar_protein_data"
 # Ensure save directory exists
 mkdir -p "$SAVE_DIR"
 
-# Read UniProt IDs and filter out those that already exist
 echo "Reading UniProt IDs..."
 mapfile -t ALL_IDS < <(cut -f1 "$UNIPROT_FILE")
-NONEXISTENT_IDS=()
-for ID in "${ALL_IDS[@]}"; do
-    if [ ! -f "$SAVE_DIR/$ID.json" ]; then
-        NONEXISTENT_IDS+=("$ID")
-    fi
-done
 
-TOTAL=${#NONEXISTENT_IDS[@]}
-echo "Found $TOTAL missing UniProt IDs."
+TOTAL=${#ALL_IDS[@]}
+echo "Found $TOTAL UniProt IDs."
 
 # Determine batch size for 20 batches
 BATCHES=20
@@ -35,7 +27,7 @@ for i in $(seq 0 $((BATCHES-1))); do
     fi
 
     # Slice the IDs for this batch
-    BATCH_IDS=("${NONEXISTENT_IDS[@]:$START:$((END-START+1))}")
+    BATCH_IDS=("${ALL_IDS[@]:$START:$((END-START+1))}")
 
     # Launch Python script for this batch in the background
     (

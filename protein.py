@@ -2,6 +2,8 @@ import aiohttp
 import argparse
 import asyncio
 from functools import lru_cache
+from gql import gql, Client
+from gql.transport.aiohttp import AIOHTTPTransport
 import gzip
 from io import BytesIO
 import json
@@ -77,7 +79,7 @@ class Protein:
         'aa_sequence',
         'coding_sequence',
         'disordered_regions',
-        'missense_variants')
+        'dbSNP_missense_variants')
 
     def __init__(self, file_path = None, UniProt_ID = None):
         """
@@ -121,10 +123,13 @@ class Protein:
             # Annotate disordered regions
             self.disordered_regions = metapredict.predict_disorder_domains(self.aa_sequence).disordered_domain_boundaries
 
-            # Annotate known missense variants from dbSNP and ClinVar
-            self.missense_variants = self._annotate_missense_variants(self._fetch_dbSNP_missense_variants() | self._fetch_ClinVar_missense_variants())
+            # Annotate known missense variants from dbSNP (with ClinVar annotations)
+            self.dbSNP_missense_variants = self._annotate_missense_variants(self._fetch_dbSNP_missense_variants() | self._fetch_ClinVar_missense_variants())
 
-            print(f"Protein {self.protein_name} ({self.UniProt_ID}) initialized with {len(self.missense_variants['disordered'])} disordered and {len(self.missense_variants['folded'])} folded missense variants.")
+            # Annotate known missense variants from gnomAD 
+            self.gnomAD_missense_variants = self._annotate_missense_variants(self._fetch_gnomAD_missense_variants())
+
+            print(f"Protein {self.protein_name} ({self.UniProt_ID}) initialized.")
 
     ##########################
     ###   Public methods   ###
@@ -145,7 +150,7 @@ class Protein:
             raise ValueError("save_dir must be specified to save the Protein object.")
 
         # Add metadata
-        final_json = self.missense_variants
+        final_json = {'dbSNP_missense_variants': self.dbSNP_missense_variants, 'gnomAD_missense_variants': self.gnomAD_missense_variants}       
         final_json['UniProt_ID'] = self.UniProt_ID
         final_json['Ensembl_gene_ID'] = self.Ensembl_gene_ID
         final_json['protein_name'] = self.protein_name
@@ -264,7 +269,12 @@ class Protein:
         self.protein_name = data['protein_name']
         self.aa_sequence = data['aa_sequence']
         self.coding_sequence = data['coding_sequence']
-        self.missense_variants = {k: v for k, v in data.items() if k in ['disordered', 'folded']}
+        if 'dbSNP_missense_variants' in data:
+            self.dbSNP_missense_variants = data['dbSNP_missense_variants']
+        else:
+            self.dbSNP_missense_variants = {k: v for k, v in data.items() if k in ['disordered', 'folded']}
+        if 'gnomAD_missense_variants' in data:
+            self.gnomAD_missense_variants = data['gnomAD_missense_variants']
         self.disordered_regions = data['disordered_regions']
         self.save_dir = os.path.dirname(file_path)
 
@@ -532,6 +542,77 @@ class Protein:
                 df = pd.read_csv(f, sep = '\t', dtype = str)
                 df.to_csv(variant_summary_path, sep = '\t', index = False)
         return df
+    
+    def _fetch_gnomAD_missense_variants(self):
+        """
+        Fetches known rare missense variants from gnomAD for the protein.
+
+        Returns
+        -------
+        VEP_data : dict[str: str]
+            A dictionary mapping rare (< 0.01 AF) amino acid changes (e.g., "45;A/G") to callability scores (allele number / 2)
+        """
+        async def async_fetch():
+            transport = AIOHTTPTransport(url = "https://gnomad.broadinstitute.org/api")
+            client = Client(transport = transport, fetch_schema_from_transport = True, execute_timeout = 60)
+
+            # Define query for gnomAD variants
+            gene_symbol = self.protein_name
+            query = gql("""
+            query VariantsInGene($gene_symbol: String!) {
+                gene(gene_symbol: $gene_symbol, reference_genome: GRCh38) {
+                    variants(dataset: gnomad_r4) {
+                        transcript_consequence {
+                            major_consequence
+                            hgvs
+                        }
+                        exome {
+                            an 
+                            af 
+                        }
+                    }
+                }
+            }
+            """)
+
+            async def safe_execute():
+                # Retry with exponential backoff
+                for attempt in range(5):
+                    try:
+                        result = await client.execute_async(query, variable_values = {"gene_symbol": gene_symbol})
+                        return result
+                    except Exception as e:
+                        wait = 2 ** attempt
+                        print(f"Request failed ({e}) → retrying in {wait}s...")
+                        await asyncio.sleep(wait)
+                raise RuntimeError(f"Failed to fetch variants for gene {gene_symbol} after retries")
+            result = await safe_execute()
+
+            # Filter to rare missense variants
+            def extract_aa_change(hgvs):
+                match = re.search(r'p\.([A-Z][a-z]{2})(\d+)([A-Z][a-z]{2})$', str(hgvs).strip())
+                if match:
+                    from_aa, pos, to_aa = match.groups()
+                    if from_aa != to_aa and from_aa in AMINO_ACIDS and to_aa in AMINO_ACIDS:
+                        return f"{pos};{AMINO_ACIDS[from_aa]}/{AMINO_ACIDS[to_aa]}"
+                return None
+            def is_rare_missense(variant):
+                try:
+                    consequence = variant['transcript_consequence']['major_consequence']
+                    af = variant['exome']['af']
+                except:
+                    return False
+                return consequence == 'missense_variant' and af < 0.01
+            variants = {extract_aa_change(variant['transcript_consequence']['hgvs']): variant['exome']['an'] / 2 for variant in result['gene']['variants'] if is_rare_missense(variant)}
+
+            return variants
+
+        # Fetch asynchronously
+        try:
+            return asyncio.run(async_fetch())
+        except RuntimeError:
+            # Already in an event loop (Jupyter/Colab)
+            return asyncio.get_event_loop().run_until_complete(async_fetch())
 
     def _annotate_missense_variants(self, missense_variants):
         """
@@ -645,7 +726,12 @@ if __name__ == "__main__":
     for uid in uni_ids:
         try:
             print(f"Processing {uid}...")
-            protein = Protein(UniProt_ID = uid)
+            file_path = os.path.join(args.save_dir, f"{uid}.json")
+            if os.path.exists(file_path):
+                protein = Protein(file_path = file_path)
+                protein.gnomAD_missense_variants = protein._annotate_missense_variants(protein._fetch_gnomAD_missense_variants())
+            else:
+                protein = Protein(UniProt_ID = uid)
             protein.save(save_dir = args.save_dir)
             print(f"Saved {uid} to {args.save_dir}")
         except:
