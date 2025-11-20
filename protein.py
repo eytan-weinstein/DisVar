@@ -583,10 +583,15 @@ class Protein:
                     try:
                         return await client.execute_async(query, variable_values = {"gene_symbol": gene_symbol})
                     except Exception as e:
-                        wait = 2 ** attempt
-                        print(f"Request failed ({e}) → retrying in {wait}s...")
-                        await asyncio.sleep(wait)
-                        attempt = min(attempt + 1, 10)
+                        msg = str(e)
+                        if not 'Gene not found' in msg:
+                            wait = 2 ** attempt
+                            print(f"Request failed ({e}) → retrying in {wait}s...")
+                            await asyncio.sleep(wait)
+                            attempt = min(attempt + 1, 10)
+                        else:
+                            return None
+
             result = await safe_execute()
 
             # Filter to rare missense variants
