@@ -80,7 +80,8 @@ class Protein:
         'coding_sequence',
         'disordered_regions',
         'dbSNP_missense_variants',
-        'gnomAD_missense_variants')
+        'gnomAD_missense_variants',
+        'gnomAD_allele_numbers')
 
     def __init__(self, file_path = None, UniProt_ID = None):
         """
@@ -157,6 +158,7 @@ class Protein:
         final_json['protein_name'] = self.protein_name
         final_json['aa_sequence'] = self.aa_sequence
         final_json['coding_sequence'] = self.coding_sequence
+        final_json['gnomAD_allele_numbers'] = self.gnomAD_allele_numbers
         final_json['disordered_regions'] = self.disordered_regions
 
         # Save by UniProt ID
@@ -276,6 +278,8 @@ class Protein:
             self.dbSNP_missense_variants = {k: v for k, v in data.items() if k in ['disordered', 'folded']}
         if 'gnomAD_missense_variants' in data:
             self.gnomAD_missense_variants = data['gnomAD_missense_variants']
+        if 'gnomad_allele_numbers' in data:
+            self.gnomAD_allele_numbers = data['gnomAD_allele_numbers']
         self.disordered_regions = data['disordered_regions']
         self.save_dir = os.path.dirname(file_path)
 
@@ -619,6 +623,76 @@ class Protein:
         except RuntimeError:
             # Already in an event loop (Jupyter/Colab)
             return asyncio.get_event_loop().run_until_complete(async_fetch())
+    
+    def _fetch_gnomAD_allele_numbers(self, path_to_gtf, all_gnomAD_allele_numbers):
+        """
+        Fetches the gnomAD allele number for each base of the coding sequence.
+
+        Parameters
+        ----------
+        path_to_gtf : str
+            Path to gencode.v44.annotation.gtf, which should be downloaded and unzipped from https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_44/gencode.v44.annotation.gtf.gz
+        all_gnomAD_allele_numbers : dict[str : int]
+            A dictionary mapping genomic positions (e.g., "chr1:123456") to allele numbers from gnomAD.
+            This should be a sum of exomic and genomic allele numbers sourced from these files: https://gnomad.broadinstitute.org/downloads#v4-all-sites-allele-number
+
+        Returns
+        -------
+        gnomAD_allele_numbers : list[int]
+            A list of length len(coding_sequence) giving the allele number for each base
+        """
+        # Retrieve canonical transcript ID
+        URL = f"https://rest.ensembl.org/lookup/id/{self.Ensembl_gene_ID}?expand=1;content-type=application/json"
+        response = requests.get(URL, headers = {"Content-Type": "application/json"})
+        if not response.ok:
+            raise ValueError(f"Failed to fetch transcripts for gene {self.Ensembl_gene_ID} (HTTP {response.status_code})")
+        data = response.json()
+        transcripts = data.get('Transcript', [])
+        if not transcripts:
+            raise ValueError(f"No transcripts found for gene {self.Ensembl_gene_ID}")
+        canonical_transcript = next((t for t in transcripts if t.get('is_canonical')), transcripts[0])
+        transcript_ID = canonical_transcript['id']
+
+        # Get the genomic coordinates of the coding sequence from gtf
+        CDS_blocks = []
+        with open(path_to_gtf) as f:
+            for line in f:
+                if line.startswith("#"):
+                    continue
+                fields = line.strip().split("\t")
+                if fields[2] != "CDS":
+                    continue
+                attr = fields[8]
+                tid = attr.split('transcript_id "')[1].split('"')[0]
+                if tid.startswith(transcript_ID):
+                    chrom = fields[0]
+                    start = int(fields[3])
+                    end = int(fields[4])
+                    strand = fields[6]
+                    CDS_blocks.append((chrom, start, end, strand))
+        if not CDS_blocks: 
+            raise ValueError(f"No CDS found for transcript {transcript_ID}")
+        strand = CDS_blocks[0][3]
+        if strand == "+":
+            CDS_blocks.sort(key = lambda x: x[1])
+        else:
+            CDS_blocks.sort(key = lambda x:x[1], reverse = True)
+        cds_pos = 1
+        base_coords = []
+        for chrom, start, end, strand in CDS_blocks:
+            if strand == "+": 
+                for gpos in range(start, end + 1):
+                    base_coords.append((cds_pos, chrom, gpos, strand))
+                    cds_pos += 1
+            else:
+                for gpos in range(end, start - 1, -1):
+                    base_coords.append((cds_pos, chrom, gpos, strand))
+                    cds_pos += 1
+        
+        # Fetch allele numbers for each base
+        gnomAD_allele_numbers = [all_gnomAD_allele_numbers.get(f"{base_coord[1]}:{base_coord[3]}", 0) for base_coord in base_coords]
+
+        return gnomAD_allele_numbers
 
     def _annotate_missense_variants(self, missense_variants):
         """
@@ -723,22 +797,24 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = "Fetch and save Protein objects from UniProt IDs.")
     parser.add_argument('--UniProt', required = True, nargs = '+', help = "One or more UniProt IDs separated by space.")    
     parser.add_argument('--save_dir', required = True, help = "Directory where Protein JSON files will be saved.")
+
     args = parser.parse_args()
 
     # Handle single ID or list of IDs
     uni_ids = [uid.strip() for uid in args.UniProt]
+
+    # Load JSON of all gnomAD allele numbers
+    with open('/neuhaus/eytan/gnomAD_allele_numbers.json', 'r') as f:
+        ALL_GNOMAD_ALLELE_NUMBERS = json.load(f)
 
     # Save each Protein object
     for uid in uni_ids:
         try:
             print(f"Processing {uid}...")
             file_path = os.path.join(args.save_dir, f"{uid}.json")
-            if os.path.exists(file_path):
-                protein = Protein(file_path = file_path)
-                if not hasattr(protein, 'gnomAD_missense_variants'):
-                    protein.gnomAD_missense_variants = protein._annotate_missense_variants(protein._fetch_gnomAD_missense_variants())
-            else:
-                protein = Protein(UniProt_ID = uid)
+            protein = Protein(file_path = file_path)
+            protein.gnomAD_missense_variants = {'disordered': list(protein.gnomAD_missense_variants['disordered'].keys()), 'folded': list(protein.gnomAD_missense_variants['folded'].keys())}
+            protein.gnomAD_allele_numbers = protein._fetch_gnomAD_allele_numbers(path_to_gtf = '/neuhaus/eytan/gencode.v44.annotation.gtf', all_gnomAD_allele_numbers = ALL_GNOMAD_ALLELE_NUMBERS)
             protein.save(save_dir = args.save_dir)
             print(f"Saved {uid} to {args.save_dir}")
         except:
