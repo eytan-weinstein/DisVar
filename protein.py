@@ -690,7 +690,7 @@ class Protein:
                     cds_pos += 1
         
         # Fetch allele numbers for each base
-        gnomAD_allele_numbers = [all_gnomAD_allele_numbers.get(f"{base_coord[1]}:{base_coord[3]}", 0) for base_coord in base_coords]
+        gnomAD_allele_numbers = [all_gnomAD_allele_numbers.get(f"{base_coord[1]}:{base_coord[2]}", 0) for base_coord in base_coords]
 
         return gnomAD_allele_numbers
 
@@ -813,7 +813,10 @@ if __name__ == "__main__":
             print(f"Processing {uid}...")
             file_path = os.path.join(args.save_dir, f"{uid}.json")
             protein = Protein(file_path = file_path)
-            protein.gnomAD_missense_variants = {'disordered': list(protein.gnomAD_missense_variants['disordered'].keys()), 'folded': list(protein.gnomAD_missense_variants['folded'].keys())}
+            try:
+                protein.gnomAD_missense_variants = {'disordered': list(protein.gnomAD_missense_variants['disordered'].keys()), 'folded': list(protein.gnomAD_missense_variants['folded'].keys())}
+            except:
+                pass
             protein.gnomAD_allele_numbers = protein._fetch_gnomAD_allele_numbers(path_to_gtf = '/neuhaus/eytan/gencode.v44.annotation.gtf', all_gnomAD_allele_numbers = ALL_GNOMAD_ALLELE_NUMBERS)
             protein.save(save_dir = args.save_dir)
             print(f"Saved {uid} to {args.save_dir}")
