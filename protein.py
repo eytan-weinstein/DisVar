@@ -624,14 +624,14 @@ class Protein:
             # Already in an event loop (Jupyter/Colab)
             return asyncio.get_event_loop().run_until_complete(async_fetch())
     
-    def _fetch_gnomAD_allele_numbers(self, path_to_gtf, all_gnomAD_allele_numbers):
+    def _fetch_gnomAD_allele_numbers(self, gtf, all_gnomAD_allele_numbers):
         """
         Fetches the gnomAD allele number for each base of the coding sequence.
 
         Parameters
         ----------
-        path_to_gtf : str
-            Path to gencode.v44.annotation.gtf, which should be downloaded and unzipped from https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_44/gencode.v44.annotation.gtf.gz
+        gtf : str
+            The lines from gencode.v44.annotation.gtf, which should be downloaded and unzipped from https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_44/gencode.v44.annotation.gtf.gz
         all_gnomAD_allele_numbers : dict[str : int]
             A dictionary mapping genomic positions (e.g., "chr1:123456") to allele numbers from gnomAD.
             This should be a sum of exomic and genomic allele numbers sourced from these files: https://gnomad.broadinstitute.org/downloads#v4-all-sites-allele-number
@@ -654,22 +654,21 @@ class Protein:
         transcript_ID = canonical_transcript['id']
 
         # Get the genomic coordinates of the coding sequence from gtf
-        CDS_blocks = []
-        with open(path_to_gtf) as f:
-            for line in f:
-                if line.startswith("#"):
-                    continue
-                fields = line.strip().split("\t")
-                if fields[2] != "CDS":
-                    continue
-                attr = fields[8]
-                tid = attr.split('transcript_id "')[1].split('"')[0]
-                if tid.startswith(transcript_ID):
-                    chrom = fields[0]
-                    start = int(fields[3])
-                    end = int(fields[4])
-                    strand = fields[6]
-                    CDS_blocks.append((chrom, start, end, strand))
+        CDS_blocks = [] 
+        for line in gtf:
+            if line.startswith("#"):
+                continue
+            fields = line.strip().split("\t")
+            if fields[2] != "CDS":
+                continue
+            attr = fields[8]
+            tid = attr.split('transcript_id "')[1].split('"')[0]
+            if tid.startswith(transcript_ID):
+                chrom = fields[0]
+                start = int(fields[3])
+                end = int(fields[4])
+                strand = fields[6]
+                CDS_blocks.append((chrom, start, end, strand))
         if not CDS_blocks: 
             raise ValueError(f"No CDS found for transcript {transcript_ID}")
         strand = CDS_blocks[0][3]
