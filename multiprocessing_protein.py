@@ -34,10 +34,12 @@ def process_uid(uid, save_dir):
         except:
             pass
 
-        protein.gnomAD_allele_numbers = protein._fetch_gnomAD_allele_numbers(
-            path_to_gtf=GTF_LINES,
-            all_gnomAD_allele_numbers=ALL_GNOMAD_ALLELE_NUMBERS
-        )
+        # Fetch gnomAD allele numbers
+        if not hasattr(protein, 'gnomAD_allele_numbers'):
+            protein.gnomAD_allele_numbers = protein._fetch_gnomAD_allele_numbers(
+                path_to_gtf=GTF_LINES,
+                all_gnomAD_allele_numbers=ALL_GNOMAD_ALLELE_NUMBERS
+            )
 
         protein.save(save_dir=save_dir)
         print(f"Saved {uid}")
