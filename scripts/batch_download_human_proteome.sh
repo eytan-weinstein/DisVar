@@ -14,8 +14,8 @@ mapfile -t ALL_IDS < <(cut -f1 "$UNIPROT_FILE")
 TOTAL=${#ALL_IDS[@]}
 echo "Found $TOTAL UniProt IDs."
 
-# Determine batch size for 10 batches
-BATCHES=10
+# Determine batch size for 4 batches
+BATCHES=4
 BATCH_SIZE=$(( (TOTAL + BATCHES - 1) / BATCHES ))
 
 # Launch 10 background processes
