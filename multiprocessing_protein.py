@@ -37,7 +37,7 @@ def process_uid(uid, save_dir):
         # Fetch gnomAD allele numbers
         if not hasattr(protein, 'gnomAD_allele_numbers'):
             protein.gnomAD_allele_numbers = protein._fetch_gnomAD_allele_numbers(
-                path_to_gtf=GTF_LINES,
+                gtf=GTF_LINES,
                 all_gnomAD_allele_numbers=ALL_GNOMAD_ALLELE_NUMBERS
             )
 
