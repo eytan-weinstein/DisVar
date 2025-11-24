@@ -1,3 +1,4 @@
+from collections import Counter
 from copy import deepcopy
 import json
 import matplotlib.pyplot as plt
@@ -168,27 +169,42 @@ def find_pathogenic_residues(group = 'disordered_proteome', condition = 'origina
 
     return enrichment_scores, fig
 
-def compute_proteome_mutational_frequencies(proteome_dir):
+def compute_proteome_mutational_frequencies(proteome_dir, database = 'dbSNP'):
     """
     Computes and then saves expected and observed mutational frequencies for the human proteome.
-    These are stored at stored at './data/mutational_frequencies/proteome'
+    These are stored at stored at './data/*_mutational_frequencies/proteome'
 
     Parameters
     ----------
     proteome_dir : str
         Path to the directory where Protein files for the human proteome have been downloaded by the main method of protein.py
+    database : str
+        The database from which missense variants were sourced. Options are 'dbSNP' and 'gnomAD'
     """
-    expected, all_observed, pathogenic_observed, benign_observed = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(4))
+    if database == 'dbSNP':
+        expected, all_observed, pathogenic_observed, benign_observed = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(4))
 
-    for UniProt_ID in os.listdir(proteome_dir):
-        protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
-        null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies()
-        expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
-        all_variants = protein.missense_variants['disordered'] | protein.missense_variants['folded']
-        all_observed, pathogenic_observed, benign_observed = _update_variant_counts(all_variants, all_observed, pathogenic_observed, benign_observed)
+        for UniProt_ID in os.listdir(proteome_dir):
+            protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
+            null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies()
+            expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
+            all_variants = protein.missense_variants['disordered'] | protein.missense_variants['folded']
+            all_observed, pathogenic_observed, benign_observed = _update_variant_counts(all_variants, all_observed, pathogenic_observed, benign_observed)
                 
-    _save_frequencies('proteome', Protein()._normalize_mutational_frequencies(expected), all_observed, pathogenic_observed, benign_observed)
+        _save_frequencies('proteome', Protein()._normalize_mutational_frequencies(expected), all_observed, pathogenic_observed, benign_observed)
+    
+    elif database == 'gnomAD':
+        expected, all_observed = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(2))
 
+        for UniProt_ID in os.listdir(proteome_dir):
+            protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
+            null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(gnomAD = True)
+            expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
+            observed = dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in [protein.gnomAD_missense_variants['disordered'] + protein.gnomAD_missense_variants['folded']]]))
+            all_observed = {k: all_observed[k] + observed.get(k, 0) for k in all_observed}
+        
+        _save_frequencies('proteome', expected, all_observed)
+            
 def compute_disordered_proteome_mutational_frequencies(proteome_dir):
     """
     Computes and then saves expected and observed mutational frequencies for the disordered human proteome.
@@ -384,7 +400,7 @@ def _update_variant_counts(all_variants, all_observed, pathogenic_observed, beni
     
     return all_observed, pathogenic_observed, benign_observed
 
-def _save_frequencies(subdirectory, expected, all_observed, pathogenic_observed, benign_observed):
+def _save_frequencies(subdirectory, expected, all_observed, pathogenic_observed = None, benign_observed = None, database = 'dbSNP'):
     """
     Saves expected and observed mutational frequencies as JSON files under './data/mutational_frequencies/{subdirectory}'.
 
@@ -396,20 +412,31 @@ def _save_frequencies(subdirectory, expected, all_observed, pathogenic_observed,
         Expected mutational frequency dictionary
     all_observed : dict[str:float]
         Counts for all variants
-    pathogenic_observed : dict[str:float]
+    pathogenic_observed : dict[str:float] OR None
         Counts for pathogenic and likely pathogenic variants
-    benign_observed : dict[str:float]
+    benign_observed : dict[str:float] OR None
         Counts for benign and likely benign variants
     """
-    expected_basepath = os.path.join(BASEPATH, f'data/mutational_frequencies/{subdirectory}/expected')
-    os.makedirs(expected_basepath, exist_ok = True)
-    with open(os.path.join(expected_basepath, 'expected.json'), 'w') as f:
-        json.dump(expected, f, indent = 4)
-    observed_basepath = os.path.join(BASEPATH, f'data/mutational_frequencies/{subdirectory}/observed')
-    os.makedirs(observed_basepath, exist_ok = True)
-    with open(os.path.join(observed_basepath, 'all.json'), 'w') as f:
-        json.dump(all_observed, f, indent = 4)
-    with open(os.path.join(observed_basepath, 'pathogenic.json'), 'w') as f:
-        json.dump(pathogenic_observed, f, indent = 4)
-    with open(os.path.join(observed_basepath, 'benign.json'), 'w') as f:
-        json.dump(benign_observed, f, indent = 4)
+    if database == 'dbSNP':
+        expected_basepath = os.path.join(BASEPATH, f'data/dbSNP_mutational_frequencies/{subdirectory}/expected')
+        os.makedirs(expected_basepath, exist_ok = True)
+        with open(os.path.join(expected_basepath, 'expected.json'), 'w') as f:
+            json.dump(expected, f, indent = 4)
+        observed_basepath = os.path.join(BASEPATH, f'data/dbSNP_mutational_frequencies/{subdirectory}/observed')
+        os.makedirs(observed_basepath, exist_ok = True)
+        with open(os.path.join(observed_basepath, 'all.json'), 'w') as f:
+            json.dump(all_observed, f, indent = 4)
+        with open(os.path.join(observed_basepath, 'pathogenic.json'), 'w') as f:
+            json.dump(pathogenic_observed, f, indent = 4)
+        with open(os.path.join(observed_basepath, 'benign.json'), 'w') as f:
+            json.dump(benign_observed, f, indent = 4)
+    
+    elif database == 'gnomAD':
+        expected_basepath = os.path.join(BASEPATH, f'data/gnomAD_mutational_frequencies/{subdirectory}/expected')
+        os.makedirs(expected_basepath, exist_ok = True)
+        with open(os.path.join(expected_basepath, 'expected.json'), 'w') as f:
+            json.dump(expected, f, indent = 4)
+        observed_basepath = os.path.join(BASEPATH, f'data/gnomAD_mutational_frequencies/{subdirectory}/observed')
+        os.makedirs(observed_basepath, exist_ok = True)
+        with open(os.path.join(observed_basepath, 'all.json'), 'w') as f:
+            json.dump(all_observed, f, indent = 4)

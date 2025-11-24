@@ -169,7 +169,7 @@ class Protein:
         with open(file_path, 'w') as f:
             json.dump(final_json, f, indent = 4)
     
-    def compute_null_expectation_mutational_frequencies(self, CDS = None):
+    def compute_null_expectation_mutational_frequencies(self, CDS = None, gnomAD = False, gnomAD_allele_numbers = None):
         """
         Given a coding sequence, computes a (non-normalized!) null expectation of the germline mutational frequencies (missense mutations only).
         These are sourced from trinucleotide substitutions taken from https://github.com/pjshort/dddMAPS/blob/master/data/forSanger_1KG_mutation_rate_table.txt and saved as a json to './data/trinucleotide_substitution_rates.json'
@@ -180,6 +180,11 @@ class Protein:
             A coding sequence
             If None, will assume the whole coding sequence for this protein
             Note that this coding sequence must be of length 3x + 2, where x is the number of codons. The + 2 are the flanking bases on either end.
+        gnomAD : bool (defualt False)
+            If True, will weight the mutational frequencies by the gnomAD allele numbers for each base in the coding sequence
+        gnomAD_allele_numbers : list[int] OR None
+            A list of gnomAD allele numbers for each base in the coding sequence
+            If None and gnomAD is True, will use the gnomAD_allele_numbers attribute of this Protein object
 
         Returns
         -------
@@ -201,10 +206,20 @@ class Protein:
             trinucleotide_substitution_rates = json.load(f)
         null_expectation_mutational_frequencies = {}
 
+        # Initialize gnomAD allele numbers 
+        if gnomAD:
+            if gnomAD_allele_numbers is None:
+                gnomAD_allele_numbers = self.gnomAD_allele_numbers
+            gnomAD_allele_numbers = [0] + gnomAD_allele_numbers + [0]  # Add flanking bases
+
         for i in range(1, len(CDS) - 1, 3):
 
             # Extract codon
             codon = CDS[i:i+3]
+
+            # Extract allele numbers for gnomAD weighting
+            if gnomAD:
+                allele_numbers = gnomAD_allele_numbers[i:i+3]
 
             # Extract original amino acid corresponding to that codon
             original_aa = CODONS[codon]
@@ -248,6 +263,8 @@ class Protein:
                     # Append expected mutational frequency
                     aa_change = f"{original_aa}/{substituted_aa}"
                     aa_change_rate = trinucleotide_substitution_rates[original_trinucleotide][final_trinucleotide]
+                    if gnomAD:
+                        aa_change_rate *= allele_numbers[i]
                     null_expectation_mutational_frequencies[aa_change] = null_expectation_mutational_frequencies.get(aa_change, 0) + aa_change_rate
         
         return null_expectation_mutational_frequencies
