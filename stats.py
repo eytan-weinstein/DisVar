@@ -327,6 +327,7 @@ def compute_folded_proteome_mutational_frequencies(proteome_dir, database = 'dbS
             protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
 
             if hasattr(protein, 'gnomAD_allele_numbers') and (len(protein.coding_sequence) == len(protein.gnomAD_allele_numbers)):
+                disordered_nt = [(start * 3, end * 3) for start, end in protein.disordered_regions]
                 folded_sequences = {}
                 prev_end = 0
                 for start, end in disordered_nt:
