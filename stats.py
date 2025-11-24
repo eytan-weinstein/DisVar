@@ -2,6 +2,7 @@ from collections import Counter
 from copy import deepcopy
 import json
 import matplotlib.pyplot as plt
+import numpy as np
 import os
 import pandas as pd
 from scipy.stats import fisher_exact
@@ -51,7 +52,7 @@ def find_pathogenic_residues(group = 'disordered_proteome', condition = 'origina
     Parameters
     ----------
     group : str
-        The group of proteins of interest. This must correspond to a folder name in data/mutational_frequencies 
+        The group of proteins of interest. This must correspond to a folder name in data/dbSNP_mutational_frequencies 
     aa_change : str from ['original', 'substituted', 'aa_change']
         Whether to compute enrichments over the original amino acid, substituted amino acid, or amino acid change
     plot_title : str
@@ -65,7 +66,7 @@ def find_pathogenic_residues(group = 'disordered_proteome', condition = 'origina
         Plots showing enrichment and relative and absolute frequencies of amino acids/amino acid changes within group
     """
     # Retrieve mutational frequencies
-    mutational_frequencies = os.path.join(BASEPATH, 'data/mutational_frequencies')
+    mutational_frequencies = os.path.join(BASEPATH, 'data/dbSNP_mutational_frequencies')
     with open(os.path.join(mutational_frequencies, group, 'expected/expected.json'), 'r') as file:
         expected = json.load(file)
     with open(os.path.join(mutational_frequencies, group, 'observed/pathogenic.json'), 'r') as file:
@@ -130,7 +131,7 @@ def find_pathogenic_residues(group = 'disordered_proteome', condition = 'origina
     # Combine enrichment scores into final table
     enrichment_scores = pd.DataFrame([pathogenic_to_expected_p_vals, pathogenic_to_expected_odds, pathogenic_to_benign_p_vals, pathogenic_to_benign_odds]).T
     enrichment_scores.columns = ['p-val pathogenic/expected', 'O/E pathogenic/expected', 'p-val pathogenic/benign', 'O/E pathogenic/benign']
-    enrichment_scores = enrichment_scores.sort_values(by = 'p-val pathogenic/expected', ascending = True)
+    enrichment_scores = enrichment_scores.sort_values(by = 'p-val pathogenic/expected', ascending = False)
 
     # Subplots
     fig, (ax0, ax1) = plt.subplots(2, 1, sharex = True, figsize = (8, 11), gridspec_kw = {'height_ratios': [1, 2]})
@@ -163,6 +164,99 @@ def find_pathogenic_residues(group = 'disordered_proteome', condition = 'origina
         ax1.set_xticklabels(amino_acids, rotation = 90, fontsize = 5)
     ax1.set_ylabel('relative frequency', fontsize = 10)
     ax1.set_ylim(0, max(expected_y + benign_normalized_y + pathogenic_normalized_y) + 0.02)
+    ax1.legend()
+
+    plt.close(fig)
+
+    return enrichment_scores, fig
+
+def find_mutationally_constrained_residues(group = 'disordered_proteome', condition = 'original', plot_title = 'Mutationally Constrained Missense Variants by Original Amino Acid, All Disordered Regions'):
+    """
+    Finds mutationally constrained residues O/E observed/expected.
+    The results are returned as a table of enrichment scores, and a figure of multiple plots is generated.
+
+    Parameters
+    ----------
+    group : str
+        The group of proteins of interest. This must correspond to a folder name in data/gnomAD_mutational_frequencies 
+    aa_change : str from ['original', 'substituted', 'aa_change']
+        Whether to compute enrichments over the original amino acid, substituted amino acid, or amino acid change
+    plot_title : str
+        The title to give to the figure of multiple plots
+    
+    Returns
+    -------
+    enrichment_scores : pd.DataFrame
+        A data frame of enrichment scores for observed/expected
+    fig : Figure
+        Plots showing enrichment and relative and absolute frequencies of amino acids/amino acid changes within group
+    """
+    # Retrieve mutational frequencies
+    mutational_frequencies = os.path.join(BASEPATH, 'data/gnomAD_mutational_frequencies')
+    with open(os.path.join(mutational_frequencies, group, 'observed/all.json'), 'r') as file:
+        observed = json.load(file)
+    with open(os.path.join(mutational_frequencies, group, 'expected/expected.json'), 'r') as file:
+        expected = json.load(file)
+        expected = {k: v * sum(observed.values()) for k, v in expected.items()}
+    
+    # Combine by original/substituted amino acid
+    if condition != 'aa_change':
+
+        if condition == 'substituted':
+            i = 1
+        else:
+            i = 0
+
+        expected_combined = {}
+        for k, v in expected.items():
+            src = k.split('/')[i]
+            expected_combined[src] = expected_combined.get(src, 0) + v
+        expected = expected_combined
+
+        observed_combined = {}
+        for k, v in observed.items():
+            src = k.split('/')[i]
+            observed_combined[src] = observed_combined.get(src, 0) + v
+        observed = observed_combined
+    
+    # Calculate enrichment of pathogenic variants relative to expected mutability 
+    observed_to_expected_odds = {}
+    for k, v in observed.items():
+        observed_to_expected_odds[k] = observed[k] / expected[k]
+    
+    # Combine enrichment scores into final table
+    enrichment_scores = pd.DataFrame([observed_to_expected_odds]).T
+    enrichment_scores.columns = ['O/E (observed/expected)']
+    enrichment_scores = enrichment_scores.sort_values(by = 'O/E (observed/expected)', ascending = True)
+
+    # Subplots
+    fig, (ax0, ax1) = plt.subplots(2, 1, sharex = True, figsize = (8, 11), gridspec_kw = {'height_ratios': [1, 2]})
+    fig.suptitle(plot_title, fontsize = 10, y = 0.98)
+    fig.subplots_adjust(top = 0.92)  
+    amino_acids = sorted(expected.keys())
+    point_size = 40
+    if condition == 'aa_change':
+        point_size = 20
+
+    # Absolute frequency plot
+    ax0.bar(amino_acids, [observed[amino_acid] for amino_acid in amino_acids], color = 'lime', alpha = 0.7)
+    ax0.set_ylabel('absolute frequency', fontsize = 10)
+    ax0.tick_params(axis = 'x', labelbottom = True)
+    if condition == 'aa_change':
+        ax0.set_xticks(range(len(amino_acids)))
+        ax0.set_xticklabels(amino_acids, rotation = 90, fontsize = 5)
+    
+    # Relative frequency plot
+    expected_normalized_y = [Protein()._normalize_mutational_frequencies(expected)[a] for a in amino_acids]
+    observed_normalized_y = [Protein()._normalize_mutational_frequencies(observed)[a] for a in amino_acids]
+    ax1.scatter(amino_acids, expected_normalized_y, s = point_size, color = 'blue', label = 'expected')
+    ax1.scatter(amino_acids, observed_normalized_y, s = point_size, color = 'red', label = 'observed')
+    ax1.tick_params(axis = 'x', labelbottom = True)
+    if condition == 'aa_change':
+        ax1.set_xticks(range(len(amino_acids)))
+        ax1.set_xticklabels(amino_acids, rotation = 90, fontsize = 5)
+    ax1.set_ylabel('relative frequency', fontsize = 10)
+    ax1.set_ylim(0, max(expected_normalized_y + observed_normalized_y) + 0.02)
     ax1.legend()
 
     plt.close(fig)
@@ -356,7 +450,7 @@ def compute_folded_proteome_mutational_frequencies(proteome_dir, database = 'dbS
         
         _save_frequencies('folded_proteome', Protein()._normalize_mutational_frequencies(expected), all_observed, database = 'gnomAD')
 
-def compute_RGG_IDR_mutational_frequencies(proteome_dir):
+def compute_RGG_IDR_mutational_frequencies(proteome_dir, database = 'dbSNP'):
     """
     Computes and then saves expected and observed mutational frequencies for all disordered RGG-containing regions.
     These are stored at stored at './data/mutational_frequencies/RGG_IDRs'
@@ -365,59 +459,53 @@ def compute_RGG_IDR_mutational_frequencies(proteome_dir):
     ----------
     proteome_dir : str
         Path to the directory where Protein files for the human proteome have been downloaded by the main method of protein.py
+    database : str
+        The database from which missense variants were sourced. Options are 'dbSNP' and 'gnomAD'
     """
     RGG_IDRs = {}
     with open(os.path.join(BASEPATH, 'data/RGG_IDRs.tsv')) as f:
         for line in f:
             RGG_IDR = line.strip().split('_')
             RGG_IDRs[RGG_IDR[0]] = [int(x) for x in RGG_IDR[2:]]
+
+    if database == 'dbSNP':
     
-    expected, all_observed, pathogenic_observed, benign_observed = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(4))
-
-    for UniProt_ID in RGG_IDRs:
-        try:
-            protein = Protein(file_path = os.path.join(proteome_dir, f'{UniProt_ID}.json'))
-        except:
-            continue
-        disordered_nt = [((start - 1) * 3, (end - 1) * 3) for start, end in [RGG_IDRs[UniProt_ID]]]
-        for start, end in disordered_nt:
-            if start == 0:
-                start = 3
-            try:
-                flanking_after = protein.coding_sequence[end + 1]
-            except:
-                flanking_after = 'T'
-            disordered_sequence = protein.coding_sequence[start - 1 : end] + flanking_after
-            null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = disordered_sequence)
-            expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
-        all_variants = protein.missense_variants['disordered'] | protein.missense_variants['folded']
-        all_variants = {k: v for k, v in all_variants.items() if (RGG_IDRs[UniProt_ID][0] <= int(k.split(';')[0]) <= RGG_IDRs[UniProt_ID][1])}
-        all_observed, pathogenic_observed, benign_observed = _update_variant_counts(all_variants, all_observed, pathogenic_observed, benign_observed)
-  
-    _save_frequencies('RGG_IDRs', Protein()._normalize_mutational_frequencies(expected), all_observed, pathogenic_observed, benign_observed)
-
-def compute_NARDINI_IDR_cluster_mutational_frequencies(proteome_dir):
-    """
-    Computes and then saves expected and observed mutational frequencies for all clusters of IDRs annotated by NARDINI (https://www.cell.com/cell/fulltext/S0092-8674(25)01191-2).
-    These are stored at stored at './data/mutational_frequencies/NARDINI_IDRs_Cluster_{cluster}'
-
-    Parameters
-    ----------
-    proteome_dir : str
-        Path to the directory where Protein files for the human proteome have been downloaded by the main method of protein.py
-    """
-    NARDINI_IDR_clusters = pd.read_csv(os.path.join(BASEPATH, 'data/NARDINI_IDR_clusters.csv'))
-
-    for cluster in range(0, 30):
-
-        IDRs = NARDINI_IDR_clusters[NARDINI_IDR_clusters['Cluster Number'] == cluster]
-
         expected, all_observed, pathogenic_observed, benign_observed = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(4))
 
-        for UniProt_ID, start_position, end_position in zip(IDRs['Uniprot'], IDRs['Start Pos'], IDRs['End Pos']):
-            try: 
+        for UniProt_ID in RGG_IDRs:
+            try:
                 protein = Protein(file_path = os.path.join(proteome_dir, f'{UniProt_ID}.json'))
-                disordered_nt = [(start * 3, end * 3) for start, end in [[start_position, end_position]]]
+            except:
+                continue
+            disordered_nt = [((start - 1) * 3, (end - 1) * 3) for start, end in [RGG_IDRs[UniProt_ID]]]
+            for start, end in disordered_nt:
+                if start == 0:
+                    start = 3
+                try:
+                    flanking_after = protein.coding_sequence[end + 1]
+                except:
+                    flanking_after = 'T'
+                disordered_sequence = protein.coding_sequence[start - 1 : end] + flanking_after
+                null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = disordered_sequence)
+                expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
+            all_variants = protein.missense_variants['disordered'] | protein.missense_variants['folded']
+            all_variants = {k: v for k, v in all_variants.items() if (RGG_IDRs[UniProt_ID][0] <= int(k.split(';')[0]) <= RGG_IDRs[UniProt_ID][1])}
+            all_observed, pathogenic_observed, benign_observed = _update_variant_counts(all_variants, all_observed, pathogenic_observed, benign_observed)
+  
+        _save_frequencies('RGG_IDRs', Protein()._normalize_mutational_frequencies(expected), all_observed, pathogenic_observed, benign_observed)
+    
+    elif database == 'gnomAD':
+        expected, all_observed = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(2))
+
+        for UniProt_ID in RGG_IDRs:
+            protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
+
+            # Exclude collagens and other coiled coil/structural ECM-associated proteins
+            if protein.protein_name in COLLAGENS:
+                continue 
+
+            if hasattr(protein, 'gnomAD_allele_numbers') and (len(protein.coding_sequence) == len(protein.gnomAD_allele_numbers)):
+                disordered_nt = [(start * 3, end * 3) for start, end in protein.disordered_regions]
                 for start, end in disordered_nt:
                     if start == 0:
                         start = 3
@@ -426,16 +514,96 @@ def compute_NARDINI_IDR_cluster_mutational_frequencies(proteome_dir):
                     except:
                         flanking_after = 'T'
                     disordered_sequence = protein.coding_sequence[start - 1 : end] + flanking_after
-                    null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = disordered_sequence)
+                    gnomAD_allele_numbers = [0] + protein.gnomAD_allele_numbers[start : end] + [0]
+                    null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = disordered_sequence, gnomAD = True, gnomAD_allele_numbers = gnomAD_allele_numbers)
                     expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
-                all_variants = protein.missense_variants['disordered'] | protein.missense_variants['folded']
-                all_variants = {k: v for k, v in all_variants.items() if ((start_position + 1) <= int(k.split(';')[0]) <= (end_position + 1))}
-                all_observed, pathogenic_observed, benign_observed = _update_variant_counts(all_variants, all_observed, pathogenic_observed, benign_observed)
-            except:
+                observed = dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in protein.gnomAD_missense_variants['disordered']]))
+                all_observed = {k: all_observed[k] + observed.get(k, 0) for k in all_observed}
+            else:
                 continue
         
-        _save_frequencies(f'NARDINI_IDRs_Cluster_{cluster}', Protein()._normalize_mutational_frequencies(expected), all_observed, pathogenic_observed, benign_observed)
+        _save_frequencies('RGG_IDRs', Protein()._normalize_mutational_frequencies(expected), all_observed, database = 'gnomAD')
+
+def compute_NARDINI_IDR_cluster_mutational_frequencies(proteome_dir, database = 'dbSNP'):
+    """
+    Computes and then saves expected and observed mutational frequencies for all clusters of IDRs annotated by NARDINI (https://www.cell.com/cell/fulltext/S0092-8674(25)01191-2).
+    These are stored at stored at './data/mutational_frequencies/NARDINI_IDRs_Cluster_{cluster}'
+
+    Parameters
+    ----------
+    proteome_dir : str
+        Path to the directory where Protein files for the human proteome have been downloaded by the main method of protein.py
+    database : str
+        The database from which missense variants were sourced. Options are 'dbSNP' and 'gnomAD'
+    """
+    NARDINI_IDR_clusters = pd.read_csv(os.path.join(BASEPATH, 'data/NARDINI_IDR_clusters.csv'))
+
+    for cluster in range(0, 30):
+
+        IDRs = NARDINI_IDR_clusters[NARDINI_IDR_clusters['Cluster Number'] == cluster]
+
+        if database == 'dbSNP':
+
+            expected, all_observed, pathogenic_observed, benign_observed = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(4))
+
+            for UniProt_ID, start_position, end_position in zip(IDRs['Uniprot'], IDRs['Start Pos'], IDRs['End Pos']):
+                try: 
+                    protein = Protein(file_path = os.path.join(proteome_dir, f'{UniProt_ID}.json'))
+
+                    # Exclude collagens and other coiled coil/structural ECM-associated proteins
+                    if protein.protein_name in COLLAGENS:
+                        continue 
+
+                    disordered_nt = [(start * 3, end * 3) for start, end in [[start_position, end_position]]]
+                    for start, end in disordered_nt:
+                        if start == 0:
+                            start = 3
+                        try:
+                            flanking_after = protein.coding_sequence[end + 1]
+                        except:
+                            flanking_after = 'T'
+                        disordered_sequence = protein.coding_sequence[start - 1 : end] + flanking_after
+                        null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = disordered_sequence)
+                        expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
+                    all_variants = protein.missense_variants['disordered'] | protein.missense_variants['folded']
+                    all_variants = {k: v for k, v in all_variants.items() if ((start_position + 1) <= int(k.split(';')[0]) <= (end_position + 1))}
+                    all_observed, pathogenic_observed, benign_observed = _update_variant_counts(all_variants, all_observed, pathogenic_observed, benign_observed)
+                except:
+                    continue
         
+            _save_frequencies(f'NARDINI_IDRs_Cluster_{cluster}', Protein()._normalize_mutational_frequencies(expected), all_observed, pathogenic_observed, benign_observed)
+        
+        elif database == 'gnomAD':
+
+            expected, all_observed = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(2))
+
+            for UniProt_ID, start_position, end_position in zip(IDRs['Uniprot'], IDRs['Start Pos'], IDRs['End Pos']):
+                try: 
+                    protein = Protein(file_path = os.path.join(proteome_dir, f'{UniProt_ID}.json'))
+
+                    # Exclude collagens and other coiled coil/structural ECM-associated proteins
+                    if protein.protein_name in COLLAGENS:
+                        continue 
+
+                    disordered_nt = [(start * 3, end * 3) for start, end in [[start_position, end_position]]]
+                    for start, end in disordered_nt:
+                        if start == 0:
+                            start = 3
+                        try:
+                            flanking_after = protein.coding_sequence[end + 1]
+                        except:
+                            flanking_after = 'T'
+                        disordered_sequence = protein.coding_sequence[start - 1 : end] + flanking_after
+                        gnomAD_allele_numbers = [0] + protein.gnomAD_allele_numbers[start : end] + [0]
+                        null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = disordered_sequence, gnomAD = True, gnomAD_allele_numbers = gnomAD_allele_numbers)
+                        expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
+                    observed = dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in [protein.gnomAD_missense_variants['disordered'] + protein.gnomAD_missense_variants['folded']][0] if ((start_position + 1) <= int(protein._parse_aa_change(count, whole_change = True)[0]) <= (end_position + 1))]))
+                    all_observed = {k: all_observed[k] + observed.get(k, 0) for k in all_observed}
+                except:
+                    continue
+        
+            _save_frequencies(f'NARDINI_IDRs_Cluster_{cluster}', Protein()._normalize_mutational_frequencies(expected), all_observed, database = 'gnomAD')
+
 
 ############################
 ###   Helper functions   ###
