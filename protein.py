@@ -278,7 +278,7 @@ class Protein:
             self.dbSNP_missense_variants = {k: v for k, v in data.items() if k in ['disordered', 'folded']}
         if 'gnomAD_missense_variants' in data:
             self.gnomAD_missense_variants = data['gnomAD_missense_variants']
-        if 'gnomad_allele_numbers' in data:
+        if 'gnomAD_allele_numbers' in data:
             self.gnomAD_allele_numbers = data['gnomAD_allele_numbers']
         self.disordered_regions = data['disordered_regions']
         self.save_dir = os.path.dirname(file_path)
