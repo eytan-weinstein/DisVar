@@ -219,10 +219,12 @@ def find_mutationally_constrained_residues(group = 'disordered_proteome', condit
             observed_combined[src] = observed_combined.get(src, 0) + v
         observed = observed_combined
     
-    # Calculate enrichment of pathogenic variants relative to expected mutability 
+    # Calculate enrichment of variants relative to expected mutability 
     observed_to_expected_odds = {}
+    z_scores = {}
     for k, v in observed.items():
-        observed_to_expected_odds[k] = observed[k] / expected[k]
+        observed_to_expected_odds[k] = v / expected[k]
+        z_scores[k] = (v - np.mean(list(observed.values()))) / np.std(list(observed.values()))
     
     # Combine enrichment scores into final table
     enrichment_scores = pd.DataFrame([observed_to_expected_odds]).T
