@@ -282,7 +282,7 @@ def compute_proteome_mutational_frequencies(proteome_dir, database = 'dbSNP'):
             protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
             null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies()
             expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
-            all_variants = protein.missense_variants['disordered'] | protein.missense_variants['folded']
+            all_variants = protein.dbSNP_missense_variants['disordered'] | protein.dbSNP_missense_variants['folded']
             all_observed, pathogenic_observed, benign_observed = _update_variant_counts(all_variants, all_observed, pathogenic_observed, benign_observed)
                 
         _save_frequencies('proteome', Protein()._normalize_mutational_frequencies(expected), all_observed, pathogenic_observed, benign_observed)
@@ -335,7 +335,7 @@ def compute_disordered_proteome_mutational_frequencies(proteome_dir, database = 
                 disordered_sequence = protein.coding_sequence[start - 1 : end] + flanking_after
                 null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = disordered_sequence)
                 expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
-            all_variants = protein.missense_variants['disordered']
+            all_variants = protein.dbSNP_missense_variants['disordered']
             all_observed, pathogenic_observed, benign_observed = _update_variant_counts(all_variants, all_observed, pathogenic_observed, benign_observed)
   
         _save_frequencies('disordered_proteome', Protein()._normalize_mutational_frequencies(expected), all_observed, pathogenic_observed, benign_observed)
@@ -409,7 +409,7 @@ def compute_folded_proteome_mutational_frequencies(proteome_dir, database = 'dbS
             for folded_sequence in folded_sequences:
                 null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = folded_sequence)
                 expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
-            all_variants = protein.missense_variants['folded']
+            all_variants = protein.dbSNP_missense_variants['folded']
             all_observed, pathogenic_observed, benign_observed = _update_variant_counts(all_variants, all_observed, pathogenic_observed, benign_observed)
   
         _save_frequencies('folded_proteome', Protein()._normalize_mutational_frequencies(expected), all_observed, pathogenic_observed, benign_observed)
@@ -488,7 +488,7 @@ def compute_RGG_IDR_mutational_frequencies(proteome_dir, database = 'dbSNP'):
                 disordered_sequence = protein.coding_sequence[start - 1 : end] + flanking_after
                 null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = disordered_sequence)
                 expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
-            all_variants = protein.missense_variants['disordered'] | protein.missense_variants['folded']
+            all_variants = protein.dbSNP_missense_variants['disordered'] | protein.dbSNP_missense_variants['folded']
             all_variants = {k: v for k, v in all_variants.items() if (RGG_IDRs[UniProt_ID][0] <= int(k.split(';')[0]) <= RGG_IDRs[UniProt_ID][1])}
             all_observed, pathogenic_observed, benign_observed = _update_variant_counts(all_variants, all_observed, pathogenic_observed, benign_observed)
   
@@ -564,7 +564,7 @@ def compute_NARDINI_IDR_cluster_mutational_frequencies(proteome_dir, database = 
                         disordered_sequence = protein.coding_sequence[start - 1 : end] + flanking_after
                         null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = disordered_sequence)
                         expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
-                    all_variants = protein.missense_variants['disordered'] | protein.missense_variants['folded']
+                    all_variants = protein.dbSNP_missense_variants['disordered'] | protein.dbSNP_missense_variants['folded']
                     all_variants = {k: v for k, v in all_variants.items() if ((start_position + 1) <= int(k.split(';')[0]) <= (end_position + 1))}
                     all_observed, pathogenic_observed, benign_observed = _update_variant_counts(all_variants, all_observed, pathogenic_observed, benign_observed)
                 except:
