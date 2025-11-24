@@ -203,7 +203,7 @@ def compute_proteome_mutational_frequencies(proteome_dir, database = 'dbSNP'):
             observed = dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in [protein.gnomAD_missense_variants['disordered'] + protein.gnomAD_missense_variants['folded']]]))
             all_observed = {k: all_observed[k] + observed.get(k, 0) for k in all_observed}
         
-        _save_frequencies('proteome', expected, all_observed)
+        _save_frequencies('proteome', expected, all_observed, database = 'gnomAD')
             
 def compute_disordered_proteome_mutational_frequencies(proteome_dir):
     """
