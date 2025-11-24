@@ -271,18 +271,12 @@ def compute_disordered_proteome_mutational_frequencies(proteome_dir, database = 
                     expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
                 observed = dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in protein.gnomAD_missense_variants['disordered']]))
                 all_observed = {k: all_observed[k] + observed.get(k, 0) for k in all_observed}
-
-
-                null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(gnomAD = True)
-                expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
-                observed = dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in [protein.gnomAD_missense_variants['disordered'] + protein.gnomAD_missense_variants['folded']][0]]))
-                all_observed = {k: all_observed[k] + observed.get(k, 0) for k in all_observed}
             else:
                 continue
         
         _save_frequencies('disordered_proteome', Protein()._normalize_mutational_frequencies(expected), all_observed, database = 'gnomAD')
 
-def compute_folded_proteome_mutational_frequencies(proteome_dir):
+def compute_folded_proteome_mutational_frequencies(proteome_dir, database = 'dbSNP'):
     """
     Computes and then saves expected and observed mutational frequencies for the folded human proteome.
     These are stored at stored at './data/mutational_frequencies/folded_proteome'
@@ -291,37 +285,75 @@ def compute_folded_proteome_mutational_frequencies(proteome_dir):
     ----------
     proteome_dir : str
         Path to the directory where Protein files for the human proteome have been downloaded by the main method of protein.py
+    database : str
+        The database from which missense variants were sourced. Options are 'dbSNP' and 'gnomAD'
     """
-    expected, all_observed, pathogenic_observed, benign_observed = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(4))
+    if database == 'dbSNP':
+        expected, all_observed, pathogenic_observed, benign_observed = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(4))
 
-    for UniProt_ID in os.listdir(proteome_dir):
-        protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
-        disordered_nt = [(start * 3, end * 3) for start, end in protein.disordered_regions]
-        folded_sequences = []
-        prev_end = 0
-        for start, end in disordered_nt:
-            if start > prev_end:
+        for UniProt_ID in os.listdir(proteome_dir):
+            protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
+            disordered_nt = [(start * 3, end * 3) for start, end in protein.disordered_regions]
+            folded_sequences = []
+            prev_end = 0
+            for start, end in disordered_nt:
+                if start > prev_end:
+                    if prev_end == 0:
+                        prev_end = 3
+                    try:
+                        flanking_after = protein.coding_sequence[start + 1]
+                    except:
+                        flanking_after = 'T'
+                    folded_sequence = protein.coding_sequence[prev_end - 1 : start] + flanking_after
+                    folded_sequences.append(folded_sequence)
+                prev_end = end
+            if prev_end < len(protein.coding_sequence):
                 if prev_end == 0:
                     prev_end = 3
-                try:
-                    flanking_after = protein.coding_sequence[start + 1]
-                except:
-                    flanking_after = 'T'
-                folded_sequence = protein.coding_sequence[prev_end - 1 : start] + flanking_after
+                folded_sequence = protein.coding_sequence[prev_end - 1 : ] + 'T'
                 folded_sequences.append(folded_sequence)
-            prev_end = end
-        if prev_end < len(protein.coding_sequence):
-            if prev_end == 0:
-                prev_end = 3
-            folded_sequence = protein.coding_sequence[prev_end - 1 : ] + 'T'
-            folded_sequences.append(folded_sequence)
-        for folded_sequence in folded_sequences:
-            null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = folded_sequence)
-            expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
-        all_variants = protein.missense_variants['folded']
-        all_observed, pathogenic_observed, benign_observed = _update_variant_counts(all_variants, all_observed, pathogenic_observed, benign_observed)
+            for folded_sequence in folded_sequences:
+                null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = folded_sequence)
+                expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
+            all_variants = protein.missense_variants['folded']
+            all_observed, pathogenic_observed, benign_observed = _update_variant_counts(all_variants, all_observed, pathogenic_observed, benign_observed)
   
-    _save_frequencies('folded_proteome', Protein()._normalize_mutational_frequencies(expected), all_observed, pathogenic_observed, benign_observed)
+        _save_frequencies('folded_proteome', Protein()._normalize_mutational_frequencies(expected), all_observed, pathogenic_observed, benign_observed)
+    
+    elif database == 'gnomAD':
+        expected, all_observed = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(2))
+
+        for UniProt_ID in os.listdir(proteome_dir):
+            protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
+
+            if hasattr(protein, 'gnomAD_allele_numbers') and (len(protein.coding_sequence) == len(protein.gnomAD_allele_numbers)):
+                folded_sequences = {}
+                prev_end = 0
+                for start, end in disordered_nt:
+                    if start > prev_end:
+                        if prev_end == 0:
+                            prev_end = 3
+                        try:
+                            flanking_after = protein.coding_sequence[start + 1]
+                        except:
+                            flanking_after = 'T'
+                        folded_sequence = protein.coding_sequence[prev_end - 1 : start] + flanking_after
+                        folded_sequences[folded_sequence] = [0] + protein.gnomAD_allele_numbers[prev_end : start] + [0]
+                    prev_end = end
+                if prev_end < len(protein.coding_sequence):
+                    if prev_end == 0:
+                        prev_end = 3
+                    folded_sequence = protein.coding_sequence[prev_end - 1 : ] + 'T'
+                    folded_sequences[folded_sequence] = [0] + protein.gnomAD_allele_numbers[prev_end : ] + [0]
+                for folded_sequence in folded_sequences:
+                    null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = folded_sequence, gnomAD = True, gnomAD_allele_numbers = folded_sequences[folded_sequence])
+                    expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
+                observed = dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in protein.gnomAD_missense_variants['folded']]))
+                all_observed = {k: all_observed[k] + observed.get(k, 0) for k in all_observed}
+            else:
+                continue
+        
+        _save_frequencies('folded_proteome', Protein()._normalize_mutational_frequencies(expected), all_observed, database = 'gnomAD')
 
 def compute_RGG_IDR_mutational_frequencies(proteome_dir):
     """
