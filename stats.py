@@ -201,7 +201,7 @@ def compute_proteome_mutational_frequencies(proteome_dir, database = 'dbSNP'):
             if hasattr(protein, 'gnomAD_missense_variants'):
                 null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(gnomAD = True)
                 expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
-                observed = dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in [protein.gnomAD_missense_variants['disordered'] + protein.gnomAD_missense_variants['folded']]]))
+                observed = dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in [protein.gnomAD_missense_variants['disordered'] + protein.gnomAD_missense_variants['folded']][0]]))
                 all_observed = {k: all_observed[k] + observed.get(k, 0) for k in all_observed}
             else:
                 continue
