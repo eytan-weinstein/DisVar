@@ -498,11 +498,10 @@ def compute_RGG_IDR_mutational_frequencies(proteome_dir, database = 'dbSNP'):
         expected, all_observed = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(2))
 
         for UniProt_ID in RGG_IDRs:
-            protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
-
-            # Exclude collagens and other coiled coil/structural ECM-associated proteins
-            if protein.protein_name in COLLAGENS:
-                continue 
+            try:
+                protein = Protein(file_path = os.path.join(proteome_dir, f'{UniProt_ID}.json'))
+            except:
+                continue
 
             if hasattr(protein, 'gnomAD_allele_numbers') and (len(protein.coding_sequence) == len(protein.gnomAD_allele_numbers)):
                 disordered_nt = [(start * 3, end * 3) for start, end in protein.disordered_regions]
