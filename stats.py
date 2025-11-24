@@ -206,9 +206,9 @@ def compute_proteome_mutational_frequencies(proteome_dir, database = 'dbSNP'):
             else:
                 continue
         
-        _save_frequencies('proteome', expected, all_observed, database = 'gnomAD')
+        _save_frequencies('proteome', Protein()._normalize_mutational_frequencies(expected), all_observed, database = 'gnomAD')
             
-def compute_disordered_proteome_mutational_frequencies(proteome_dir):
+def compute_disordered_proteome_mutational_frequencies(proteome_dir, database = 'dbSNP'):
     """
     Computes and then saves expected and observed mutational frequencies for the disordered human proteome.
     These are stored at stored at './data/mutational_frequencies/disordered_proteome'
@@ -217,31 +217,70 @@ def compute_disordered_proteome_mutational_frequencies(proteome_dir):
     ----------
     proteome_dir : str
         Path to the directory where Protein files for the human proteome have been downloaded by the main method of protein.py
+    database : str
+        The database from which missense variants were sourced. Options are 'dbSNP' and 'gnomAD'
     """
-    expected, all_observed, pathogenic_observed, benign_observed = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(4))
+    if database == 'dbSNP':
+        expected, all_observed, pathogenic_observed, benign_observed = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(4))
 
-    for UniProt_ID in os.listdir(proteome_dir):
-        protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
+        for UniProt_ID in os.listdir(proteome_dir):
+            protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
 
-        # Exclude collagens and other coiled coil/structural ECM-associated proteins
-        if protein.protein_name in COLLAGENS:
-            continue 
+            # Exclude collagens and other coiled coil/structural ECM-associated proteins
+            if protein.protein_name in COLLAGENS:
+                continue 
 
-        disordered_nt = [(start * 3, end * 3) for start, end in protein.disordered_regions]
-        for start, end in disordered_nt:
-            if start == 0:
-                start = 3
-            try:
-                flanking_after = protein.coding_sequence[end + 1]
-            except:
-                flanking_after = 'T'
-            disordered_sequence = protein.coding_sequence[start - 1 : end] + flanking_after
-            null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = disordered_sequence)
-            expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
-        all_variants = protein.missense_variants['disordered']
-        all_observed, pathogenic_observed, benign_observed = _update_variant_counts(all_variants, all_observed, pathogenic_observed, benign_observed)
+            disordered_nt = [(start * 3, end * 3) for start, end in protein.disordered_regions]
+            for start, end in disordered_nt:
+                if start == 0:
+                    start = 3
+                try:
+                    flanking_after = protein.coding_sequence[end + 1]
+                except:
+                    flanking_after = 'T'
+                disordered_sequence = protein.coding_sequence[start - 1 : end] + flanking_after
+                null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = disordered_sequence)
+                expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
+            all_variants = protein.missense_variants['disordered']
+            all_observed, pathogenic_observed, benign_observed = _update_variant_counts(all_variants, all_observed, pathogenic_observed, benign_observed)
   
-    _save_frequencies('disordered_proteome', Protein()._normalize_mutational_frequencies(expected), all_observed, pathogenic_observed, benign_observed)
+        _save_frequencies('disordered_proteome', Protein()._normalize_mutational_frequencies(expected), all_observed, pathogenic_observed, benign_observed)
+    
+    elif database == 'gnomAD':
+        expected, all_observed = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(2))
+
+        for UniProt_ID in os.listdir(proteome_dir):
+            protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
+
+            # Exclude collagens and other coiled coil/structural ECM-associated proteins
+            if protein.protein_name in COLLAGENS:
+                continue 
+
+            if hasattr(protein, 'gnomAD_allele_numbers') and (len(protein.coding_sequence) == len(protein.gnomAD_allele_numbers)):
+                disordered_nt = [(start * 3, end * 3) for start, end in protein.disordered_regions]
+                for start, end in disordered_nt:
+                    if start == 0:
+                        start = 3
+                    try:
+                        flanking_after = protein.coding_sequence[end + 1]
+                    except:
+                        flanking_after = 'T'
+                    disordered_sequence = protein.coding_sequence[start - 1 : end] + flanking_after
+                    gnomAD_allele_numbers = [0] + protein.gnomAD_allele_numbers[start : end] + [0]
+                    null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = disordered_sequence, gnomAD = True, gnomAD_allele_numbers = gnomAD_allele_numbers)
+                    expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
+                observed = dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in protein.gnomAD_missense_variants['disordered']]))
+                all_observed = {k: all_observed[k] + observed.get(k, 0) for k in all_observed}
+
+
+                null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(gnomAD = True)
+                expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
+                observed = dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in [protein.gnomAD_missense_variants['disordered'] + protein.gnomAD_missense_variants['folded']][0]]))
+                all_observed = {k: all_observed[k] + observed.get(k, 0) for k in all_observed}
+            else:
+                continue
+        
+        _save_frequencies('disordered_proteome', Protein()._normalize_mutational_frequencies(expected), all_observed, database = 'gnomAD')
 
 def compute_folded_proteome_mutational_frequencies(proteome_dir):
     """
