@@ -298,7 +298,7 @@ def compute_proteome_mutational_frequencies(proteome_dir, database = 'dbSNP'):
                 null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(gnomAD = True)
                 expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
                 rare = {k: rare[k] + dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in [protein.gnomAD_missense_variants['disordered'] + protein.gnomAD_missense_variants['folded']][0]])).get(k, 0) for k in rare}
-                common = {k: common[k] + dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in [protein.gnomAD_common_missense_variants['disordered'] + protein.gnomAD_common_missense_variants['folded']][0]])).get(k, 0) for k in common}
+                common = {k: common[k] + dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in (list(protein.gnomAD_common_missense_variants['disordered'].keys()) + list(protein.gnomAD_common_missense_variants['folded'].keys()))])).get(k, 0) for k in common}
             else:
                 continue
         
