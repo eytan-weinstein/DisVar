@@ -343,7 +343,7 @@ def compute_disordered_proteome_mutational_frequencies(proteome_dir, database = 
         _save_frequencies('disordered_proteome', Protein()._normalize_mutational_frequencies(expected), all_observed, pathogenic_observed, benign_observed)
     
     elif database == 'gnomAD':
-        expected, all_observed = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(2))
+        expected, rare, common = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(3))
 
         for UniProt_ID in os.listdir(proteome_dir):
             protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
@@ -417,7 +417,7 @@ def compute_folded_proteome_mutational_frequencies(proteome_dir, database = 'dbS
         _save_frequencies('folded_proteome', Protein()._normalize_mutational_frequencies(expected), all_observed, pathogenic_observed, benign_observed)
     
     elif database == 'gnomAD':
-        expected, all_observed = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(2))
+        expected, rare, common = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(3))
 
         for UniProt_ID in os.listdir(proteome_dir):
             protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
@@ -497,7 +497,7 @@ def compute_RGG_IDR_mutational_frequencies(proteome_dir, database = 'dbSNP'):
         _save_frequencies('RGG_IDRs', Protein()._normalize_mutational_frequencies(expected), all_observed, pathogenic_observed, benign_observed)
     
     elif database == 'gnomAD':
-        expected, all_observed = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(2))
+        expected, rare, common = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(3))
 
         for UniProt_ID in RGG_IDRs:
             try:
@@ -576,7 +576,7 @@ def compute_NARDINI_IDR_cluster_mutational_frequencies(proteome_dir, database = 
         
         elif database == 'gnomAD':
 
-            expected, all_observed = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(2))
+            expected, rare, common = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(3))
 
             for UniProt_ID, start_position, end_position in zip(IDRs['Uniprot'], IDRs['Start Pos'], IDRs['End Pos']):
                 try: 
