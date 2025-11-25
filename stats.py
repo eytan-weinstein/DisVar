@@ -265,6 +265,119 @@ def find_mutationally_constrained_residues(group = 'disordered_proteome', condit
 
     return enrichment_scores, fig
 
+def find_common_residues(group = 'disordered_proteome', condition = 'original', plot_title = 'Rare vs Common Missense Variants by Original Amino Acid, All Disordered Regions'):
+    """
+    Finds residues enriched among common variants by O/E common/expected and O/E rare/expected. 
+    The results are returned as a table of enrichment scores, and a figure of multiple plots is generated.
+
+    Parameters
+    ----------
+    group : str
+        The group of proteins of interest. This must correspond to a folder name in data/dbSNP_mutational_frequencies 
+    aa_change : str from ['original', 'substituted', 'aa_change']
+        Whether to compute enrichments over the original amino acid, substituted amino acid, or amino acid change
+    plot_title : str
+        The title to give to the figure of multiple plots
+    
+    Returns
+    -------
+    enrichment_scores : pd.DataFrame
+        A data frame of enrichment scores for pathogenic/expected and pathogenic/benign
+    fig : Figure
+        Plots showing enrichment and relative and absolute frequencies of amino acids/amino acid changes within group
+    """
+    # Retrieve mutational frequencies
+    mutational_frequencies = os.path.join(BASEPATH, 'data/gnomAD_mutational_frequencies')
+    with open(os.path.join(mutational_frequencies, group, 'expected/expected.json'), 'r') as file:
+        expected = json.load(file)
+    with open(os.path.join(mutational_frequencies, group, 'observed/common.json'), 'r') as file:
+        common = json.load(file)
+    with open(os.path.join(mutational_frequencies, group, 'observed/rare.json'), 'r') as file:
+        rare = json.load(file)
+    
+    # Combine by original/substituted amino acid
+    if condition != 'aa_change':
+
+        if condition == 'substituted':
+            i = 1
+        else:
+            i = 0
+
+        expected_combined = {}
+        for k, v in expected.items():
+            src = k.split('/')[i]
+            expected_combined[src] = expected_combined.get(src, 0) + v
+        expected = expected_combined
+
+        common_combined = {}
+        for k, v in common.items():
+            src = k.split('/')[i]
+            common_combined[src] = common_combined.get(src, 0) + v
+        common = common_combined
+
+        rare_combined = {}
+        for k, v in rare.items():
+            src = k.split('/')[i]
+            rare_combined[src] = rare_combined.get(src, 0) + v
+        rare = rare_combined
+        
+    # Calculate enrichment of rare variants relative to common variants
+    rare_to_common_p_vals = {}
+    rare_to_common_odds = {}
+    total_common = sum(common.values())
+    total_rare = sum(rare.values())
+    for k, v in rare.items():
+        a = rare[k]
+        c = common[k]
+        b = total_rare - a
+        d = total_common - c
+        table = [[a, b],[c, d]]
+        odds, p_val = fisher_exact(table, alternative = 'greater')
+        rare_to_common_p_vals[k] = p_val
+        rare_to_common_odds[k] = odds
+    
+    # Combine enrichment scores into final table
+    enrichment_scores = pd.DataFrame([rare_to_common_odds, rare_to_common_p_vals]).T
+    enrichment_scores.columns = ['p-val rare/common', 'O/E rare/common']
+    enrichment_scores = enrichment_scores.sort_values(by = 'p-val rare/common', ascending = False)
+
+    # Subplots
+    fig, (ax0, ax1) = plt.subplots(2, 1, sharex = True, figsize = (8, 11), gridspec_kw = {'height_ratios': [1, 2]})
+    fig.suptitle(plot_title, fontsize = 10, y = 0.98)
+    fig.subplots_adjust(top = 0.92)  
+    amino_acids = sorted(expected.keys())
+    point_size = 40
+    if condition == 'aa_change':
+        point_size = 20
+
+    # Absolute frequency plot
+    ax0.bar(amino_acids, [common[amino_acid] for amino_acid in amino_acids], color = 'lime', alpha = 0.7)
+    ax0.set_ylabel('absolute frequency', fontsize = 10)
+    ax0.tick_params(axis = 'x', labelbottom = True)
+    if condition == 'aa_change':
+        ax0.set_xticks(range(len(amino_acids)))
+        ax0.set_xticklabels(amino_acids, rotation = 90, fontsize = 5)
+    
+    # Relative frequency plot
+    expected_y = [expected[a] for a in amino_acids]
+    rare_normalized = Protein()._normalize_mutational_frequencies(rare)
+    rare_normalized_y = [rare_normalized[a] for a in amino_acids]
+    common_normalized_y = [Protein()._normalize_mutational_frequencies(common)[a] for a in amino_acids]
+    ax1.scatter(amino_acids, expected_y, s = point_size, color = 'blue', label = 'expected')
+    ax1.scatter(amino_acids, common_normalized_y, s = point_size, color = 'red', label = 'common')
+    ax1.scatter(amino_acids, rare_normalized_y, s = point_size, color = 'green', label = 'rare')
+    ax1.tick_params(axis = 'x', labelbottom = True)
+    if condition == 'aa_change':
+        ax1.set_xticks(range(len(amino_acids)))
+        ax1.set_xticklabels(amino_acids, rotation = 90, fontsize = 5)
+    ax1.set_ylabel('relative frequency', fontsize = 10)
+    ax1.set_ylim(0, max(expected_y + rare_normalized_y + common_normalized_y) + 0.02)
+    ax1.legend()
+
+    plt.close(fig)
+
+    return enrichment_scores, fig
+
 def compute_proteome_mutational_frequencies(proteome_dir, database = 'dbSNP'):
     """
     Computes and then saves expected and observed mutational frequencies for the human proteome.
@@ -450,7 +563,7 @@ def compute_folded_proteome_mutational_frequencies(proteome_dir, database = 'dbS
             else:
                 continue
         
-        _save_frequencies('folded_proteome', Protein()._normalize_mutational_frequencies(expected), all_observed, database = 'gnomAD')
+        _save_frequencies('proteome', expected = Protein()._normalize_mutational_frequencies(expected), all_observed = rare, benign_observed = common, database = 'gnomAD')
 
 def compute_RGG_IDR_mutational_frequencies(proteome_dir, database = 'dbSNP'):
     """
@@ -523,7 +636,7 @@ def compute_RGG_IDR_mutational_frequencies(proteome_dir, database = 'dbSNP'):
             else:
                 continue
         
-        _save_frequencies('RGG_IDRs', Protein()._normalize_mutational_frequencies(expected), all_observed, database = 'gnomAD')
+        _save_frequencies('proteome', expected = Protein()._normalize_mutational_frequencies(expected), all_observed = rare, benign_observed = common, database = 'gnomAD')
 
 def compute_NARDINI_IDR_cluster_mutational_frequencies(proteome_dir, database = 'dbSNP'):
     """
