@@ -339,7 +339,7 @@ def find_common_residues(group = 'disordered_proteome', condition = 'original', 
     # Combine enrichment scores into final table
     enrichment_scores = pd.DataFrame([rare_to_common_odds, rare_to_common_p_vals]).T
     enrichment_scores.columns = ['p-val rare/common', 'O/E rare/common']
-    enrichment_scores = enrichment_scores.sort_values(by = 'p-val rare/common', ascending = False)
+    enrichment_scores = enrichment_scores.sort_values(by = 'p-val rare/common', ascending = True)
 
     # Subplots
     fig, (ax0, ax1) = plt.subplots(2, 1, sharex = True, figsize = (8, 11), gridspec_kw = {'height_ratios': [1, 2]})
@@ -364,8 +364,8 @@ def find_common_residues(group = 'disordered_proteome', condition = 'original', 
     rare_normalized_y = [rare_normalized[a] for a in amino_acids]
     common_normalized_y = [Protein()._normalize_mutational_frequencies(common)[a] for a in amino_acids]
     ax1.scatter(amino_acids, expected_y, s = point_size, color = 'blue', label = 'expected')
-    ax1.scatter(amino_acids, common_normalized_y, s = point_size, color = 'red', label = 'common')
-    ax1.scatter(amino_acids, rare_normalized_y, s = point_size, color = 'green', label = 'rare')
+    ax1.scatter(amino_acids, common_normalized_y, s = point_size, color = 'green', label = 'common')
+    ax1.scatter(amino_acids, rare_normalized_y, s = point_size, color = 'red', label = 'rare')
     ax1.tick_params(axis = 'x', labelbottom = True)
     if condition == 'aa_change':
         ax1.set_xticks(range(len(amino_acids)))
