@@ -365,12 +365,12 @@ def compute_disordered_proteome_mutational_frequencies(proteome_dir, database = 
                     gnomAD_allele_numbers = [0] + protein.gnomAD_allele_numbers[start : end] + [0]
                     null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = disordered_sequence, gnomAD = True, gnomAD_allele_numbers = gnomAD_allele_numbers)
                     expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
-                observed = dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in protein.gnomAD_missense_variants['disordered']]))
-                all_observed = {k: all_observed[k] + observed.get(k, 0) for k in all_observed}
+                rare = {k: rare[k] + dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in [protein.gnomAD_missense_variants['disordered']][0]])).get(k, 0) for k in rare}
+                common = {k: common[k] + dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in (list(protein.gnomAD_common_missense_variants['disordered'].keys()))])).get(k, 0) for k in common}
             else:
                 continue
         
-        _save_frequencies('disordered_proteome', Protein()._normalize_mutational_frequencies(expected), all_observed, database = 'gnomAD')
+        _save_frequencies('disordered_proteome', expected = Protein()._normalize_mutational_frequencies(expected), all_observed = rare, benign_observed = common, database = 'gnomAD')
 
 def compute_folded_proteome_mutational_frequencies(proteome_dir, database = 'dbSNP'):
     """
