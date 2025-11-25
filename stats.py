@@ -290,19 +290,19 @@ def compute_proteome_mutational_frequencies(proteome_dir, database = 'dbSNP'):
         _save_frequencies('proteome', Protein()._normalize_mutational_frequencies(expected), all_observed, pathogenic_observed, benign_observed)
     
     elif database == 'gnomAD':
-        expected, all_observed = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(2))
+        expected, rare, common = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(3))
 
         for UniProt_ID in os.listdir(proteome_dir):
             protein = Protein(file_path = os.path.join(proteome_dir, UniProt_ID))
-            if hasattr(protein, 'gnomAD_allele_numbers') and (len(protein.coding_sequence) == len(protein.gnomAD_allele_numbers)):
+            if hasattr(protein, 'gnomAD_common_missense_variants') and hasattr(protein, 'gnomAD_allele_numbers') and (len(protein.coding_sequence) == len(protein.gnomAD_allele_numbers)):
                 null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(gnomAD = True)
                 expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
-                observed = dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in [protein.gnomAD_missense_variants['disordered'] + protein.gnomAD_missense_variants['folded']][0]]))
-                all_observed = {k: all_observed[k] + observed.get(k, 0) for k in all_observed}
+                rare = {k: rare[k] + dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in [protein.gnomAD_missense_variants['disordered'] + protein.gnomAD_missense_variants['folded']][0]])).get(k, 0) for k in rare}
+                common = {k: common[k] + dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in [protein.gnomAD_common_missense_variants['disordered'] + protein.gnomAD_common_missense_variants['folded']][0]])).get(k, 0) for k in common}
             else:
                 continue
         
-        _save_frequencies('proteome', Protein()._normalize_mutational_frequencies(expected), all_observed, database = 'gnomAD')
+        _save_frequencies('proteome', expected = Protein()._normalize_mutational_frequencies(expected), all_observed = rare, benign_observed = common, database = 'gnomAD')
             
 def compute_disordered_proteome_mutational_frequencies(proteome_dir, database = 'dbSNP'):
     """
@@ -682,5 +682,9 @@ def _save_frequencies(subdirectory, expected, all_observed, pathogenic_observed 
             json.dump(expected, f, indent = 4)
         observed_basepath = os.path.join(BASEPATH, f'data/gnomAD_mutational_frequencies/{subdirectory}/observed')
         os.makedirs(observed_basepath, exist_ok = True)
-        with open(os.path.join(observed_basepath, 'all.json'), 'w') as f:
+        if os.path.exists(os.path.join(observed_basepath, 'all.json')):
+            os.remove(os.path.join(observed_basepath, 'all.json'))
+        with open(os.path.join(observed_basepath, 'rare.json'), 'w') as f:
             json.dump(all_observed, f, indent = 4)
+        with open(os.path.join(observed_basepath, 'common.json'), 'w') as f:
+            json.dump(benign_observed, f, indent = 4)
