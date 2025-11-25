@@ -81,6 +81,7 @@ class Protein:
         'disordered_regions',
         'dbSNP_missense_variants',
         'gnomAD_missense_variants',
+        'gnomAD_common_missense_variants'
         'gnomAD_allele_numbers')
 
     def __init__(self, file_path = None, UniProt_ID = None):
@@ -129,7 +130,8 @@ class Protein:
             self.dbSNP_missense_variants = self._annotate_missense_variants(self._fetch_dbSNP_missense_variants() | self._fetch_ClinVar_missense_variants())
 
             # Annotate known missense variants from gnomAD 
-            self.gnomAD_missense_variants = self._annotate_missense_variants(self._fetch_gnomAD_missense_variants())
+            self.gnomAD_missense_variants = self._annotate_missense_variants(self._fetch_gnomAD_missense_variants(rare = True))
+            self.gnomAD_common_missense_variants = self._annotate_missense_variants(self._fetch_gnomAD_missense_variants(rare = False))
 
             print(f"Protein {self.protein_name} ({self.UniProt_ID}) initialized.")
 
@@ -152,7 +154,7 @@ class Protein:
             raise ValueError("save_dir must be specified to save the Protein object.")
 
         # Add metadata
-        final_json = {'dbSNP_missense_variants': self.dbSNP_missense_variants, 'gnomAD_missense_variants': self.gnomAD_missense_variants}       
+        final_json = {'dbSNP_missense_variants': self.dbSNP_missense_variants, 'gnomAD_missense_variants': self.gnomAD_missense_variants, 'gnomAD_common_missense_variants': self.gnomAD_common_missense_variants}       
         final_json['UniProt_ID'] = self.UniProt_ID
         final_json['Ensembl_gene_ID'] = self.Ensembl_gene_ID
         final_json['protein_name'] = self.protein_name
@@ -295,6 +297,8 @@ class Protein:
             self.dbSNP_missense_variants = {k: v for k, v in data.items() if k in ['disordered', 'folded']}
         if 'gnomAD_missense_variants' in data:
             self.gnomAD_missense_variants = data['gnomAD_missense_variants']
+        if 'gnomAD_common_missense_variants' in data:
+            self.gnomAD_common_missense_variants = data['gnomAD_common_missense_variants']
         if 'gnomAD_allele_numbers' in data:
             self.gnomAD_allele_numbers = data['gnomAD_allele_numbers']
         self.disordered_regions = data['disordered_regions']
@@ -565,7 +569,7 @@ class Protein:
                 df.to_csv(variant_summary_path, sep = '\t', index = False)
         return df
     
-    def _fetch_gnomAD_missense_variants(self):
+    def _fetch_gnomAD_missense_variants(self, rare = True):
         """
         Fetches known rare missense variants from gnomAD for the protein.
 
@@ -573,6 +577,8 @@ class Protein:
         -------
         VEP_data : dict[str: str]
             A dictionary mapping rare (< 0.01 AF) amino acid changes (e.g., "45;A/G") to callability scores (allele number / 2)
+        rare : bool (default True)
+            If True, only fetches rare variants with allele frequency < 0.01. If False, fetches common missense variants.
         """
         async def async_fetch():
             transport = AIOHTTPTransport(url = "https://gnomad.broadinstitute.org/api")
@@ -615,7 +621,7 @@ class Protein:
 
             result = await safe_execute()
 
-            # Filter to rare missense variants
+            # Filter to missense variants
             def extract_aa_change(hgvs):
                 match = re.search(r'p\.([A-Z][a-z]{2})(\d+)([A-Z][a-z]{2})$', str(hgvs).strip())
                 if match:
@@ -628,9 +634,17 @@ class Protein:
                     consequence = variant['transcript_consequence']['major_consequence']
                     af = variant['exome']['af']
                 except:
-                    return False
-                return consequence == 'missense_variant' and af < 0.01
-            variants = {extract_aa_change(variant['transcript_consequence']['hgvs']): variant['exome']['an'] / 2 for variant in result['gene']['variants'] if is_rare_missense(variant)}
+                    return 'invalid'
+                if consequence != 'missense_variant':
+                    return 'invalid'
+                if af < 0.01:
+                    return 'rare'
+                return 'common'
+            
+            if rare:
+                variants = {extract_aa_change(variant['transcript_consequence']['hgvs']): variant['exome']['an'] / 2 for variant in result['gene']['variants'] if is_rare_missense(variant) == 'rare'}
+            else:
+                variants = {extract_aa_change(variant['transcript_consequence']['hgvs']): variant['exome']['an'] / 2 for variant in result['gene']['variants'] if is_rare_missense(variant) == 'common'}
 
             return variants
 

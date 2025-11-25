@@ -5,13 +5,13 @@ import argparse
 
 # ========== LOAD HEAVY FILES ONCE IN PARENT ========= #
 
-print("Loading gnomAD allele numbers...")
-with open('/neuhaus/eytan/gnomAD_allele_numbers.json', 'r') as f:
-    ALL_GNOMAD_ALLELE_NUMBERS = json.load(f)
+#print("Loading gnomAD allele numbers...")
+#with open('/neuhaus/eytan/gnomAD_allele_numbers.json', 'r') as f:
+    #ALL_GNOMAD_ALLELE_NUMBERS = json.load(f)
 
-print("Loading GTF...")
-with open('/neuhaus/eytan/gencode.v44.annotation.gtf', 'r') as f:
-    GTF_LINES = f.readlines()
+#print("Loading GTF...")
+#with open('/neuhaus/eytan/gencode.v44.annotation.gtf', 'r') as f:
+    #GTF_LINES = f.readlines()
 
 
 # ========== WORKER FUNCTION (RUNS IN FORKED PROCESS) ========= #
@@ -25,23 +25,11 @@ def process_uid(uid, save_dir):
 
         protein = Protein(file_path=file_path)
 
-        # Simplify missense variants
-        try:
-            protein.gnomAD_missense_variants = {
-                'disordered': list(protein.gnomAD_missense_variants['disordered'].keys()),
-                'folded': list(protein.gnomAD_missense_variants['folded'].keys())
-            }
-        except:
-            pass
+        # Fetch common gnomAD variants
+        if not hasattr(protein, 'gnomAD_common_missense_variants'):
+            protein.gnomAD_common_missense_variants = protein._annotate_missense_variants(protein._fetch_gnomAD_missense_variants(rare = False))
 
-        # Fetch gnomAD allele numbers
-        if not hasattr(protein, 'gnomAD_allele_numbers'):
-            protein.gnomAD_allele_numbers = protein._fetch_gnomAD_allele_numbers(
-                gtf=GTF_LINES,
-                all_gnomAD_allele_numbers=ALL_GNOMAD_ALLELE_NUMBERS
-            )
-
-        protein.save(save_dir=save_dir)
+        protein.save(save_dir = save_dir)
         print(f"Saved {uid}")
 
     except Exception as e:
