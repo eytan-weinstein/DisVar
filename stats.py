@@ -445,8 +445,8 @@ def compute_folded_proteome_mutational_frequencies(proteome_dir, database = 'dbS
                 for folded_sequence in folded_sequences:
                     null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = folded_sequence, gnomAD = True, gnomAD_allele_numbers = folded_sequences[folded_sequence])
                     expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
-                observed = dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in protein.gnomAD_missense_variants['folded']]))
-                all_observed = {k: all_observed[k] + observed.get(k, 0) for k in all_observed}
+                rare = {k: rare[k] + dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in [protein.gnomAD_missense_variants['folded']][0]])).get(k, 0) for k in rare}
+                common = {k: common[k] + dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in (list(protein.gnomAD_common_missense_variants['folded'].keys()))])).get(k, 0) for k in common}
             else:
                 continue
         
@@ -518,8 +518,8 @@ def compute_RGG_IDR_mutational_frequencies(proteome_dir, database = 'dbSNP'):
                     gnomAD_allele_numbers = [0] + protein.gnomAD_allele_numbers[start : end] + [0]
                     null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = disordered_sequence, gnomAD = True, gnomAD_allele_numbers = gnomAD_allele_numbers)
                     expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
-                observed = dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in protein.gnomAD_missense_variants['disordered']]))
-                all_observed = {k: all_observed[k] + observed.get(k, 0) for k in all_observed}
+                rare = {k: rare[k] + dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in [protein.gnomAD_missense_variants['disordered']][0]])).get(k, 0) for k in rare}
+                common = {k: common[k] + dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in (list(protein.gnomAD_common_missense_variants['disordered'].keys()))])).get(k, 0) for k in common}
             else:
                 continue
         
@@ -598,8 +598,8 @@ def compute_NARDINI_IDR_cluster_mutational_frequencies(proteome_dir, database = 
                         gnomAD_allele_numbers = [0] + protein.gnomAD_allele_numbers[start : end] + [0]
                         null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = disordered_sequence, gnomAD = True, gnomAD_allele_numbers = gnomAD_allele_numbers)
                         expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
-                    observed = dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in [protein.gnomAD_missense_variants['disordered'] + protein.gnomAD_missense_variants['folded']][0] if ((start_position + 1) <= int(protein._parse_aa_change(count, whole_change = True)[0]) <= (end_position + 1))]))
-                    all_observed = {k: all_observed[k] + observed.get(k, 0) for k in all_observed}
+                    rare = {k: rare[k] + dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in [protein.gnomAD_missense_variants['disordered']][0]])).get(k, 0) for k in rare}
+                    common = {k: common[k] + dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in (list(protein.gnomAD_common_missense_variants['disordered'].keys()))])).get(k, 0) for k in common}
                 except:
                     continue
         
