@@ -696,8 +696,8 @@ def compute_NARDINI_IDR_cluster_mutational_frequencies(proteome_dir, database = 
                     protein = Protein(file_path = os.path.join(proteome_dir, f'{UniProt_ID}.json'))
 
                     # Exclude collagens and other coiled coil/structural ECM-associated proteins
-                    if protein.protein_name in COLLAGENS:
-                        continue 
+                    #if protein.protein_name in COLLAGENS:
+                        #continue 
 
                     disordered_nt = [(start * 3, end * 3) for start, end in [[start_position, end_position]]]
                     for start, end in disordered_nt:
