@@ -634,8 +634,11 @@ def compute_conditional_folder_mutational_frequencies(proteome_dir, database = '
                     except:
                         flanking_after = 'T'
                     disordered_sequence = protein.coding_sequence[start - 1 : end] + flanking_after
-                    null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = disordered_sequence)
-                    expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
+                    try:
+                        null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = disordered_sequence)
+                        expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
+                    except:
+                        pass
                 all_variants = protein.dbSNP_missense_variants['disordered'] | protein.dbSNP_missense_variants['folded']
                 all_variants = {k: v for k, v in all_variants.items() if (group[0][UniProt_ID][0] <= int(k.split(';')[0]) <= group[0][UniProt_ID][1])}
                 all_observed, pathogenic_observed, benign_observed = _update_variant_counts(all_variants, all_observed, pathogenic_observed, benign_observed)
@@ -665,8 +668,11 @@ def compute_conditional_folder_mutational_frequencies(proteome_dir, database = '
                             flanking_after = 'T'
                         disordered_sequence = protein.coding_sequence[start - 1 : end] + flanking_after
                         gnomAD_allele_numbers = [0] + protein.gnomAD_allele_numbers[start : end] + [0]
-                        null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = disordered_sequence, gnomAD = True, gnomAD_allele_numbers = gnomAD_allele_numbers)
-                        expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
+                        try:
+                            null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = disordered_sequence, gnomAD = True, gnomAD_allele_numbers = gnomAD_allele_numbers)
+                            expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
+                        except:
+                            pass
                     rare = {k: rare[k] + dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in [protein.gnomAD_missense_variants['disordered']][0]])).get(k, 0) for k in rare}
                     common = {k: common[k] + dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in (list(protein.gnomAD_common_missense_variants['disordered'].keys()))])).get(k, 0) for k in common}
                 else:
