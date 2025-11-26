@@ -613,6 +613,66 @@ def compute_conditional_folder_mutational_frequencies(proteome_dir, database = '
         if UniProt_ID  not in IDRs_pLDDT_above_90:
             IDRs_pLDDT_above_90[UniProt_ID ] = []
         IDRs_pLDDT_above_90[UniProt_ID ].append(([row['start'], row['end']]))
+    
+    if database == 'dbSNP':
+
+        for group in [(IDRs_pLDDT_below_50, 'pLDDT_below_50'), (IDRs_pLDDT_above_70, 'pLDDT_above_70'), (IDRs_pLDDT_above_90, 'pLDDT_above_90')]:
+
+            expected, all_observed, pathogenic_observed, benign_observed = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(4))
+
+            for UniProt_ID in group:
+                try:
+                    protein = Protein(file_path = os.path.join(proteome_dir, f'{UniProt_ID}.json'))
+                except:
+                    continue
+                disordered_nt = [((start - 1) * 3, (end - 1) * 3) for start, end in [group[0][UniProt_ID]]]
+                for start, end in disordered_nt:
+                    if start == 0:
+                        start = 3
+                    try:
+                        flanking_after = protein.coding_sequence[end + 1]
+                    except:
+                        flanking_after = 'T'
+                    disordered_sequence = protein.coding_sequence[start - 1 : end] + flanking_after
+                    null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = disordered_sequence)
+                    expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
+                all_variants = protein.dbSNP_missense_variants['disordered'] | protein.dbSNP_missense_variants['folded']
+                all_variants = {k: v for k, v in all_variants.items() if (group[0][UniProt_ID][0] <= int(k.split(';')[0]) <= group[0][UniProt_ID][1])}
+                all_observed, pathogenic_observed, benign_observed = _update_variant_counts(all_variants, all_observed, pathogenic_observed, benign_observed)
+  
+            _save_frequencies(group[1], Protein()._normalize_mutational_frequencies(expected), all_observed, pathogenic_observed, benign_observed)
+    
+    elif database == 'gnomAD':
+
+        for group in [(IDRs_pLDDT_below_50, 'pLDDT_below_50'), (IDRs_pLDDT_above_70, 'pLDDT_above_70'), (IDRs_pLDDT_above_90, 'pLDDT_above_90')]:
+
+            expected, rare, common = (deepcopy(POSSIBLE_SNV_AA_CONSEQUENCES) for _ in range(3))
+
+            for UniProt_ID in group[0]:
+                try:
+                    protein = Protein(file_path = os.path.join(proteome_dir, f'{UniProt_ID}.json'))
+                except:
+                    continue
+
+                if hasattr(protein, 'gnomAD_allele_numbers') and (len(protein.coding_sequence) == len(protein.gnomAD_allele_numbers)):
+                    disordered_nt = [(start * 3, end * 3) for start, end in group[0][UniProt_ID]]
+                    for start, end in disordered_nt:
+                        if start == 0:
+                            start = 3
+                        try:
+                            flanking_after = protein.coding_sequence[end + 1]
+                        except:
+                            flanking_after = 'T'
+                        disordered_sequence = protein.coding_sequence[start - 1 : end] + flanking_after
+                        gnomAD_allele_numbers = [0] + protein.gnomAD_allele_numbers[start : end] + [0]
+                        null_expectation_mutational_frequencies = protein.compute_null_expectation_mutational_frequencies(CDS = disordered_sequence, gnomAD = True, gnomAD_allele_numbers = gnomAD_allele_numbers)
+                        expected = {k: expected[k] + null_expectation_mutational_frequencies.get(k, 0) for k in expected}
+                    rare = {k: rare[k] + dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in [protein.gnomAD_missense_variants['disordered']][0]])).get(k, 0) for k in rare}
+                    common = {k: common[k] + dict(Counter([protein._parse_aa_change(count, whole_change = True)[1] for count in (list(protein.gnomAD_common_missense_variants['disordered'].keys()))])).get(k, 0) for k in common}
+                else:
+                    continue
+            
+            _save_frequencies(group[1], expected = Protein()._normalize_mutational_frequencies(expected), all_observed = rare, benign_observed = common, database = 'gnomAD')
 
 def compute_RGG_IDR_mutational_frequencies(proteome_dir, database = 'dbSNP'):
     """
