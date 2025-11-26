@@ -338,11 +338,11 @@ def find_common_residues(group = 'disordered_proteome', condition = 'original', 
     
     # Combine enrichment scores into final table
     enrichment_scores = pd.DataFrame([rare_to_common_odds, rare_to_common_p_vals]).T
-    enrichment_scores.columns = ['p-val rare/common', 'O/E rare/common']
+    enrichment_scores.columns = ['O/E rare/common', 'p-val rare/common',]
     enrichment_scores = enrichment_scores.sort_values(by = 'p-val rare/common', ascending = True)
 
     # Subplots
-    fig, (ax0, ax1) = plt.subplots(2, 1, sharex = True, figsize = (8, 11), gridspec_kw = {'height_ratios': [1, 2]})
+    fig, (ax0, ax1, ax2) = plt.subplots(3, 1, sharex = True, figsize = (8, 11), gridspec_kw = {'height_ratios': [1, 1, 2]})
     fig.suptitle(plot_title, fontsize = 10, y = 0.98)
     fig.subplots_adjust(top = 0.92)  
     amino_acids = sorted(expected.keys())
@@ -350,29 +350,39 @@ def find_common_residues(group = 'disordered_proteome', condition = 'original', 
     if condition == 'aa_change':
         point_size = 20
 
-    # Absolute frequency plot
+    # Absolute frequency plot for common variants
     ax0.bar(amino_acids, [common[amino_acid] for amino_acid in amino_acids], color = 'lime', alpha = 0.7)
     ax0.set_ylabel('absolute frequency', fontsize = 10)
     ax0.tick_params(axis = 'x', labelbottom = True)
     if condition == 'aa_change':
         ax0.set_xticks(range(len(amino_acids)))
         ax0.set_xticklabels(amino_acids, rotation = 90, fontsize = 5)
+    ax0.set_title('common variants (AF >= 0.01)')
+
+    # Absolute frequency plot
+    ax1.bar(amino_acids, [rare[amino_acid] for amino_acid in amino_acids], color = 'lime', alpha = 0.7)
+    ax1.set_ylabel('absolute frequency', fontsize = 10)
+    ax1.tick_params(axis = 'x', labelbottom = True)
+    if condition == 'aa_change':
+        ax1.set_xticks(range(len(amino_acids)))
+        ax1.set_xticklabels(amino_acids, rotation = 90, fontsize = 5)
+    ax1.set_title('rare variants (AF < 0.01)')
     
     # Relative frequency plot
     expected_y = [expected[a] for a in amino_acids]
     rare_normalized = Protein()._normalize_mutational_frequencies(rare)
     rare_normalized_y = [rare_normalized[a] for a in amino_acids]
     common_normalized_y = [Protein()._normalize_mutational_frequencies(common)[a] for a in amino_acids]
-    ax1.scatter(amino_acids, expected_y, s = point_size, color = 'blue', label = 'expected')
-    ax1.scatter(amino_acids, common_normalized_y, s = point_size, color = 'green', label = 'common')
-    ax1.scatter(amino_acids, rare_normalized_y, s = point_size, color = 'red', label = 'rare')
-    ax1.tick_params(axis = 'x', labelbottom = True)
+    ax2.scatter(amino_acids, expected_y, s = point_size, color = 'blue', label = 'expected')
+    ax2.scatter(amino_acids, common_normalized_y, s = point_size, color = 'green', label = 'common')
+    ax2.scatter(amino_acids, rare_normalized_y, s = point_size, color = 'red', label = 'rare')
+    ax2.tick_params(axis = 'x', labelbottom = True)
     if condition == 'aa_change':
-        ax1.set_xticks(range(len(amino_acids)))
-        ax1.set_xticklabels(amino_acids, rotation = 90, fontsize = 5)
-    ax1.set_ylabel('relative frequency', fontsize = 10)
-    ax1.set_ylim(0, max(expected_y + rare_normalized_y + common_normalized_y) + 0.02)
-    ax1.legend()
+        ax2.set_xticks(range(len(amino_acids)))
+        ax2.set_xticklabels(amino_acids, rotation = 90, fontsize = 5)
+    ax2.set_ylabel('relative frequency', fontsize = 10)
+    ax2.set_ylim(0, max(expected_y + rare_normalized_y + common_normalized_y) + 0.02)
+    ax2.legend()
 
     plt.close(fig)
 
@@ -564,6 +574,45 @@ def compute_folded_proteome_mutational_frequencies(proteome_dir, database = 'dbS
                 continue
         
         _save_frequencies('folded_proteome', expected = Protein()._normalize_mutational_frequencies(expected), all_observed = rare, benign_observed = common, database = 'gnomAD')
+
+def compute_conditional_folder_mutational_frequencies(proteome_dir, database = 'dbSNP'):
+    """
+    Computes and then saves expected and observed mutational frequencies for all disordered regions partitioned by their likelihood to be conditional folders.
+    These are stored at stored at './data/mutational_frequencies/pLDDT*'
+
+    Parameters
+    ----------
+    proteome_dir : str
+        Path to the directory where Protein files for the human proteome have been downloaded by the main method of protein.py
+    database : str
+        The database from which missense variants were sourced. Options are 'dbSNP' and 'gnomAD'
+    """
+    IDRs_pLDDT_below_50 = {}
+    df = pd.read_csv(os.path.join(BASEPATH, 'data/UP000005640_9606_HUMAN_pLDDT_scores_DISORDERED_THRESH_below_50_JOINT_CONSECUTIVE_MIN_10AA.out.txt'), sep = '\t')
+    df.columns = ['UniProt_ID', 'start', 'end']
+    for _, row in df.iterrows():
+        UniProt_ID = row['UniProt_ID'].split(':')[0]
+        if UniProt_ID  not in IDRs_pLDDT_below_50 :
+            IDRs_pLDDT_below_50 [UniProt_ID ] = []
+        IDRs_pLDDT_below_50 [UniProt_ID ].append(([row['start'], row['end']]))
+
+    IDRs_pLDDT_above_70 = {}
+    df = pd.read_csv(os.path.join(BASEPATH, 'data/UP000005640_9606_HUMAN_pLDDT_scores_DISORDERED_THRESH_above_70_JOINT_CONSECUTIVE_MIN_10AA.out.txt'), sep = '\t')
+    df.columns = ['UniProt_ID', 'start', 'end']
+    for _, row in df.iterrows():
+        UniProt_ID = row['UniProt_ID'].split(':')[0]
+        if UniProt_ID  not in IDRs_pLDDT_above_70:
+            IDRs_pLDDT_above_70[UniProt_ID ] = []
+        IDRs_pLDDT_above_70[UniProt_ID ].append(([row['start'], row['end']]))
+    
+    IDRs_pLDDT_above_90 = {}
+    df = pd.read_csv(os.path.join(BASEPATH, 'data/UP000005640_9606_HUMAN_pLDDT_scores_DISORDERED_THRESH_above_90_JOINT_CONSECUTIVE_MIN_10AA.out.txt'), sep = '\t')
+    df.columns = ['UniProt_ID', 'start', 'end']
+    for _, row in df.iterrows():
+        UniProt_ID = row['UniProt_ID'].split(':')[0]
+        if UniProt_ID  not in IDRs_pLDDT_above_90:
+            IDRs_pLDDT_above_90[UniProt_ID ] = []
+        IDRs_pLDDT_above_90[UniProt_ID ].append(([row['start'], row['end']]))
 
 def compute_RGG_IDR_mutational_frequencies(proteome_dir, database = 'dbSNP'):
     """
