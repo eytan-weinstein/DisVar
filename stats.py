@@ -563,7 +563,7 @@ def compute_folded_proteome_mutational_frequencies(proteome_dir, database = 'dbS
             else:
                 continue
         
-        _save_frequencies('proteome', expected = Protein()._normalize_mutational_frequencies(expected), all_observed = rare, benign_observed = common, database = 'gnomAD')
+        _save_frequencies('folded_proteome', expected = Protein()._normalize_mutational_frequencies(expected), all_observed = rare, benign_observed = common, database = 'gnomAD')
 
 def compute_RGG_IDR_mutational_frequencies(proteome_dir, database = 'dbSNP'):
     """
@@ -636,7 +636,7 @@ def compute_RGG_IDR_mutational_frequencies(proteome_dir, database = 'dbSNP'):
             else:
                 continue
         
-        _save_frequencies('proteome', expected = Protein()._normalize_mutational_frequencies(expected), all_observed = rare, benign_observed = common, database = 'gnomAD')
+        _save_frequencies('RGG_IDRs', expected = Protein()._normalize_mutational_frequencies(expected), all_observed = rare, benign_observed = common, database = 'gnomAD')
 
 def compute_NARDINI_IDR_cluster_mutational_frequencies(proteome_dir, database = 'dbSNP'):
     """
@@ -716,7 +716,7 @@ def compute_NARDINI_IDR_cluster_mutational_frequencies(proteome_dir, database = 
                 except:
                     continue
         
-            _save_frequencies(f'NARDINI_IDRs_Cluster_{cluster}', Protein()._normalize_mutational_frequencies(expected), all_observed, database = 'gnomAD')
+            _save_frequencies(f'NARDINI_IDRs_Cluster_{cluster}', expected = Protein()._normalize_mutational_frequencies(expected), all_observed = rare, benign_observed = common, database = 'gnomAD')
 
 
 ############################
