@@ -193,7 +193,7 @@ def find_mutationally_constrained_residues(group = 'disordered_proteome', condit
     """
     # Retrieve mutational frequencies
     mutational_frequencies = os.path.join(BASEPATH, 'data/gnomAD_mutational_frequencies')
-    with open(os.path.join(mutational_frequencies, group, 'observed/all.json'), 'r') as file:
+    with open(os.path.join(mutational_frequencies, group, 'observed/rare.json'), 'r') as file:
         observed = json.load(file)
     with open(os.path.join(mutational_frequencies, group, 'expected/expected.json'), 'r') as file:
         expected = json.load(file)
@@ -652,7 +652,7 @@ def compute_NARDINI_IDR_cluster_mutational_frequencies(proteome_dir, database = 
     """
     NARDINI_IDR_clusters = pd.read_csv(os.path.join(BASEPATH, 'data/NARDINI_IDR_clusters.csv'))
 
-    for cluster in range(22, 23):
+    for cluster in range(0, 30):
 
         IDRs = NARDINI_IDR_clusters[NARDINI_IDR_clusters['Cluster Number'] == cluster]
 
